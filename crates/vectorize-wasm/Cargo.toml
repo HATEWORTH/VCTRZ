@@ -1,0 +1,28 @@
+[package]
+name = "vectorize-wasm"
+description = "WebAssembly bindings for vectorize"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vectorize-core = { path = "../vectorize-core" }
+image = { workspace = true }
+wasm-bindgen = "0.2"
+# serde-wasm-bindgen for passing config objects from JS
+serde-wasm-bindgen = "0.6"
+serde = { workspace = true }
+# console_error_panic_hook — surface Rust panics as readable JS errors
+console_error_panic_hook = "0.1"
+
+[lints]
+workspace = true
+
+# NOTE on threading: rayon does NOT work in browser WASM out of the box.
+# wasm-bindgen-rayon exists but requires nightly + SharedArrayBuffer + specific
+# HTTP headers (COOP/COEP). For now, the WASM build runs single-threaded.
+# The core library's rayon usage is gated and degrades gracefully.

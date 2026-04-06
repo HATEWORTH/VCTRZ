@@ -1,0 +1,28 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Python
+__pycache__/
+*.egg-info/
+dist/
+*.whl
+.venv/
+
+# WASM build output
+crates/vectorize-wasm/pkg/
+
+# ML models (large files — use git-lfs or download separately)
+models/*.onnx
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nested repo
+VCTRZ/

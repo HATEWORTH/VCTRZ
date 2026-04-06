@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vectorize — Image to SVG Converter</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --text: #e4e4e7;
+      --text-dim: #8b8d98;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    header span {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: calc(100vh - 65px);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 0.75rem;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .dropzone p { color: var(--text-dim); font-size: 0.9rem; }
+    .dropzone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    .dropzone input[type="file"] { display: none; }
+
+    /* Mode selector */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+
+    .mode-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.5rem;
+      color: var(--text);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .mode-btn:hover { border-color: var(--accent); }
+    .mode-btn.active {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent-hover);
+    }
+
+    /* Sliders */
+    .slider-group { display: flex; flex-direction: column; gap: 0.9rem; }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .slider-row label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .slider-row label span { color: var(--text); font-variant-numeric: tabular-nums; }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Vectorize button */
+    .btn-vectorize {
+      width: 100%;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-vectorize:hover { background: var(--accent-hover); }
+    .btn-vectorize:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Status */
+    .status {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      min-height: 1.5em;
+    }
+
+    .status.error { color: var(--error); }
+    .status.success { color: var(--success); }
+
+    /* Main area */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .preview-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 1rem;
+    }
+
+    .preview-tab {
+      padding: 0.75rem 1.25rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .preview-tab:hover { color: var(--text); }
+    .preview-tab.active {
+      color: var(--accent-hover);
+      border-bottom-color: var(--accent);
+    }
+
+    .preview-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 2rem;
+      background: repeating-conic-gradient(#1e2130 0% 25%, #181b28 0% 50%) 0 0 / 20px 20px;
+    }
+
+    .preview-area img,
+    .preview-area .svg-container {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .preview-area .svg-container svg {
+      max-width: 100%;
+      max-height: calc(100vh - 180px);
+    }
+
+    .placeholder {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    /* Download bar */
+    .download-bar {
+      display: none;
+      padding: 0.75rem 1.5rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .download-bar.visible { display: flex; }
+
+    .download-bar .info {
+      flex: 1;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .btn-download {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--accent-hover);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-download:hover {
+      background: rgba(99, 102, 241, 0.1);
+    }
+
+    /* Tonal collapse */
+    .collapse-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .collapse-header .arrow {
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+      color: var(--text-dim);
+    }
+
+    .collapse-header .arrow.open { transform: rotate(90deg); }
+
+    .collapse-body {
+      display: none;
+      margin-top: 0.75rem;
+    }
+
+    .collapse-body.open { display: block; }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: 50vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Vectorize</h1>
+    <span>Raster to SVG — runs entirely in your browser via WebAssembly</span>
+  </header>
+
+  <div class="app">
+    <aside class="sidebar">
+      <!-- Drop zone -->
+      <div class="dropzone" id="dropzone">
+        <div class="icon">+</div>
+        <p>Drop an image here or click to browse</p>
+        <p style="font-size:0.75rem; margin-top:0.25rem">PNG, JPEG, WebP, BMP, GIF</p>
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+
+      <!-- Mode selector -->
+      <div>
+        <div class="section-title">Mode</div>
+        <div class="mode-grid">
+          <button class="mode-btn active" data-mode="Logo">Logo</button>
+          <button class="mode-btn" data-mode="Illustration">Illustr.</button>
+          <button class="mode-btn" data-mode="Photo">Photo</button>
+          <button class="mode-btn" data-mode="HighFidelity">HiFi</button>
+          <button class="mode-btn" data-mode="Sketch">Sketch</button>
+        </div>
+      </div>
+
+      <!-- Quality sliders -->
+      <div>
+        <div class="section-title">Quality</div>
+        <div class="slider-group">
+          <div class="slider-row">
+            <label>Color Detail <span id="val-color_detail">40</span></label>
+            <input type="range" min="0" max="100" value="40" data-param="color_detail">
+          </div>
+          <div class="slider-row">
+            <label>Path Precision <span id="val-path_precision">100</span></label>
+            <input type="range" min="0" max="100" value="100" data-param="path_precision">
+          </div>
+          <div class="slider-row">
+            <label>Curve Smoothness <span id="val-curve_smoothness">25</span></label>
+            <input type="range" min="0" max="100" value="25" data-param="curve_smoothness">
+          </div>
+          <div class="slider-row">
+            <label>Noise Filter <span id="val-noise_filter">30</span></label>
+            <input type="range" min="0" max="100" value="30" data-param="noise_filter">
+          </div>
+          <div class="slider-row">
+            <label>Gradient Layers <span id="val-gradient_layers">15</span></label>
+            <input type="range" min="0" max="100" value="15" data-param="gradient_layers">
+          </div>
+        </div>
+      </div>
+
+      <!-- Tonal controls -->
+      <div>
+        <div class="collapse-header" id="tonalToggle">
+          <div class="section-title" style="margin-bottom:0">Tonal Detail</div>
+          <span class="arrow">&#9654;</span>
+        </div>
+        <div class="collapse-body" id="tonalBody">
+          <div class="slider-group">
+            <div class="slider-row">
+              <label>Shadow Detail <span id="val-shadow_detail">100</span></label>
+              <input type="range" min="0" max="100" value="100" data-param="shadow_detail">
+            </div>
+            <div class="slider-row">
+              <label>Midtone Detail <span id="val-midtone_detail">100</span></label>
+              <input type="range" min="0" max="100" value="100" data-param="midtone_detail">
+            </div>
+            <div class="slider-row">
+              <label>Highlight Detail <span id="val-highlight_detail">100</span></label>
+              <input type="range" min="0" max="100" value="100" data-param="highlight_detail">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vectorize -->
+      <button class="btn-vectorize" id="btnVectorize" disabled>Vectorize</button>
+      <div class="status" id="status"></div>
+    </aside>
+
+    <div class="main">
+      <div class="preview-tabs">
+        <button class="preview-tab active" data-tab="input">Input</button>
+        <button class="preview-tab" data-tab="output">SVG Output</button>
+      </div>
+      <div class="preview-area" id="previewArea">
+        <div class="placeholder">Load an image to get started</div>
+      </div>
+      <div class="download-bar" id="downloadBar">
+        <div class="info" id="svgInfo"></div>
+        <button class="btn-download" id="btnDownload">Download SVG</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

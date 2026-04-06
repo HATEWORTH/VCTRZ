@@ -1,0 +1,15 @@
+# Use faster linker on each platform
+# Windows: rust-lld is bundled with rustup since 1.81
+# Linux: install mold (`sudo apt install mold`) for even faster linking
+# macOS: default linker is already fast
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# WASM target — optimize for size
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "opt-level=z"]

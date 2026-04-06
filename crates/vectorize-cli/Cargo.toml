@@ -1,0 +1,23 @@
+[package]
+name = "vectorize-cli"
+description = "CLI for vectorize — raster-to-vector conversion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "vectorize"
+path = "src/main.rs"
+
+[dependencies]
+vectorize-core = { path = "../vectorize-core" }
+image = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+[package]
+name = "vectorize-core"
+description = "High-quality raster-to-vector conversion engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+image = { workspace = true }
+imageproc = { workspace = true }
+kurbo = { workspace = true }
+rayon = { workspace = true }
+palette = { workspace = true }
+geo = { workspace = true }
+rand = { workspace = true }
+vtracer = { workspace = true }
+visioncortex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+# For snapshot testing vectorization output
+# insta = { version = "1", features = ["yaml"] }
+
+[features]
+default = []
+# GPU-accelerated preprocessing (color quantization, edge detection)
+# gpu = ["dep:wgpu"]
+# ML model inference for edge detection, anti-alias recovery
+# ml = ["dep:ort"]
+
+[lints]
+workspace = true

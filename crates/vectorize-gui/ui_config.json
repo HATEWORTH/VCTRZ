@@ -1,0 +1,32 @@
+{
+    "window_width": 1100,
+    "window_height": 750,
+    "window_min_width": 800,
+    "window_min_height": 500,
+
+    "titlebar_height": 22,
+    "toolbar_height": 26,
+    "statusbar_height": 20,
+    "progress_height": 12,
+
+    "side_panel_width": 280,
+    "side_panel_margin_x": 10,
+    "side_panel_margin_y": 4,
+
+    "inset_padding_x": 6,
+    "inset_padding_y": 4,
+
+    "section_spacing": 6,
+    "section_header_font_size": 12,
+
+    "log_box_height": 110,
+    "vectorize_row_height": 20,
+    "vectorize_button_width": 90,
+
+    "slider_label_width": 110,
+    "slider_font_size": 9,
+    "slider_height": 16,
+
+    "log_font_size": 9,
+    "status_font_size": 10
+}
