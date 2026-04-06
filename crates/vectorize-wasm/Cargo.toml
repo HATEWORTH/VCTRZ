@@ -21,6 +21,9 @@ console_error_panic_hook = "0.1"
 # getrandom needs "js" feature for wasm32-unknown-unknown targets
 getrandom = { version = "0.2", features = ["js"] }
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lints]
 workspace = true
 
