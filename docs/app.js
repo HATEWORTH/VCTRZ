@@ -17,8 +17,6 @@ async function loadWasm() {
   }
 }
 
-loadWasm();
-
 // ── Mode presets (must match Rust quality.rs) ──
 
 const MODE_DEFAULTS = {
@@ -259,7 +257,16 @@ function buildConfig() {
 // ── Vectorize ──
 
 btnVectorize.addEventListener("click", async () => {
-  if (!imageBytes || !wasm || busy) return;
+  if (busy) return;
+  if (!wasm) {
+    logMsg("ERROR: WASM engine not loaded yet. Please wait or reload.");
+    setStatus("WASM not loaded", true);
+    return;
+  }
+  if (!imageBytes) {
+    logMsg("No image loaded.");
+    return;
+  }
 
   busy = true;
   btnVectorize.disabled = true;
@@ -347,3 +354,6 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
+
+// ── Init WASM (must be after DOM refs are set up) ──
+loadWasm();
