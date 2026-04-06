@@ -1187,15 +1187,12 @@ impl eframe::App for VectorizeApp {
 
                 // ── ENGINE ────────────────────────────────────────
                 section_header(ui, "ENGINE");
-                let is_logo = self.preset_idx == 0;
-                ui.add_enabled_ui(!is_logo, |ui| {
-                    for (i, label) in ENGINE_LABELS.iter().enumerate() {
-                        if metal_toggle_sized(ui, label, i == self.engine_idx, Some(btn_w)) {
-                            self.engine_idx = i;
-                        }
-                        if i < ENGINE_LABELS.len() - 1 { ui.add_space(2.0); }
+                for (i, label) in ENGINE_LABELS.iter().enumerate() {
+                    if metal_toggle_sized(ui, label, i == self.engine_idx, Some(btn_w)) {
+                        self.engine_idx = i;
                     }
-                });
+                    if i < ENGINE_LABELS.len() - 1 { ui.add_space(2.0); }
+                }
 
                 ui.add_space(6.0);
 
