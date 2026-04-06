@@ -42,7 +42,7 @@ pub fn vectorize_logo(
     image: &image::DynamicImage,
     config: &VectorizeConfig,
 ) -> Result<String> {
-    let t0 = std::time::Instant::now();
+    let t0 = crate::par::instant_now();
 
     // Step 1: Run VTracer with logo-tuned settings for maximum curve resolution
     let logo_config = logo_vtracer_config(config);
@@ -61,7 +61,7 @@ pub fn vectorize_logo_with_progress(
     config: &VectorizeConfig,
     state: &crate::ProgressState,
 ) -> Result<String> {
-    let t0 = std::time::Instant::now();
+    let t0 = crate::par::instant_now();
 
     let logo_config = logo_vtracer_config(config);
     let base_svg = super::vtracer_backend::vectorize_with_vtracer(image, &logo_config)?;

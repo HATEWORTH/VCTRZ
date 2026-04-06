@@ -6,7 +6,7 @@
 
 use std::sync::atomic::Ordering;
 use kurbo::simplify::{simplify_bezpath, SimplifyOptions};
-use rayon::prelude::*;
+use crate::par::iter_prelude::*;
 
 use crate::{Color, ProgressState, VectorizeConfig, segment};
 
@@ -573,11 +573,10 @@ pub fn vectorize_hybrid_with_progress(
     state.total.store(total, Ordering::Relaxed);
     state.current.store(0, Ordering::Relaxed);
 
-    let refit_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let refit_deadline = crate::par::instant_now() + std::time::Duration::from_secs(10);
     let deadline_exceeded = std::sync::atomic::AtomicBool::new(false);
 
-    let refitted: Vec<RefittedElement> = elements
-        .par_iter()
+    let refitted: Vec<RefittedElement> = crate::par::maybe_par_iter!(elements)
         .map(|elem| {
             // Check global deadline + cancellation
             if deadline_exceeded.load(Ordering::Relaxed)
@@ -602,7 +601,7 @@ pub fn vectorize_hybrid_with_progress(
                 };
             }
 
-            if std::time::Instant::now() >= refit_deadline {
+            if crate::par::instant_now() >= refit_deadline {
                 deadline_exceeded.store(true, Ordering::Relaxed);
                 tracing::warn!("Hybrid: refit phase exceeded 10s budget, skipping remaining paths");
             }

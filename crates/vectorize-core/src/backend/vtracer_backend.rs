@@ -145,7 +145,7 @@ pub fn vectorize_with_vtracer(image: &DynamicImage, config: &VectorizeConfig) ->
     // Applied when curve_smoothness is in the "crisp" range (< 30) — polygon mode
     // or near-polygon output benefits most from selective bezier fitting.
     if let Some(refine_opts) = config.quality.vtracer_refine_options() {
-        let t0 = std::time::Instant::now();
+        let t0 = crate::par::instant_now();
         svg_string = crate::refine::refine_svg(&svg_string, &refine_opts);
         tracing::info!("Adaptive curve refinement: {:?}", t0.elapsed());
     }

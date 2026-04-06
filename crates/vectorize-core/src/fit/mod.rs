@@ -10,7 +10,7 @@
 
 use kurbo::simplify::{simplify_bezpath, SimplifyOptions};
 use kurbo::{BezPath, Point};
-use rayon::prelude::*;
+use crate::par::iter_prelude::*;
 
 use crate::{TracedContour, VectorPath, VectorizeConfig};
 
@@ -279,8 +279,7 @@ fn fit_params_for_mode(config: &VectorizeConfig) -> FitParams {
 pub fn fit_curves(contours: &[TracedContour], config: &VectorizeConfig) -> Vec<VectorPath> {
     let params = fit_params_for_mode(config);
 
-    contours
-        .par_iter()
+    crate::par::maybe_par_iter!(contours)
         .map(|contour| {
             let points = &contour.points;
 

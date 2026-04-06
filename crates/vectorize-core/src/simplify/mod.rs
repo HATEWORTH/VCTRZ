@@ -7,7 +7,7 @@
 
 use geo::SimplifyVw;
 use kurbo::simplify::{simplify_bezpath, SimplifyOptions};
-use rayon::prelude::*;
+use crate::par::iter_prelude::*;
 
 use crate::{SimplifyMethod, VectorPath, VectorizeConfig};
 
@@ -65,8 +65,7 @@ pub fn simplify_paths(paths: &[VectorPath], config: &VectorizeConfig) -> Vec<Vec
 /// Kurbo's Bezier-aware simplifier.
 fn simplify_kurbo(paths: &[VectorPath], tolerance: f64) -> Vec<VectorPath> {
     let opts = SimplifyOptions::default();
-    paths
-        .par_iter()
+    crate::par::maybe_par_iter!(paths)
         .map(|vp| {
             let simplified =
                 simplify_bezpath(vp.path.elements().iter().copied(), tolerance, &opts);
@@ -88,8 +87,7 @@ fn simplify_vw(paths: &[VectorPath], tolerance: f64) -> Vec<VectorPath> {
     let area_threshold = tolerance * tolerance;
     let refit_opts = SimplifyOptions::default();
 
-    paths
-        .par_iter()
+    crate::par::maybe_par_iter!(paths)
         .map(|vp| {
             let line_string = bezpath_to_linestring(&vp.path);
             if line_string.0.len() < 3 {

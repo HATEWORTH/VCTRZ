@@ -13,6 +13,7 @@ pub mod fit;
 pub mod line_layer;
 pub mod merge;
 pub mod palette;
+pub mod par;
 pub mod quality;
 pub mod shapes;
 pub mod optimize;
@@ -347,7 +348,7 @@ pub fn vectorize(image: &DynamicImage, config: &VectorizeConfig) -> Result<Strin
     if config.extract_lines {
         let rgba = image.to_rgba8();
         if let Some(extraction) = line_layer::extract_line_mask(&rgba) {
-            let t0 = std::time::Instant::now();
+            let t0 = crate::par::instant_now();
 
             // Build the binary line image for separate tracing
             let line_img = DynamicImage::ImageRgba8(
@@ -580,7 +581,7 @@ fn vectorize_engine(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
 
     match config.engine {
         Engine::Vtracer => {
-            let t0 = std::time::Instant::now();
+            let t0 = crate::par::instant_now();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 backend::vtracer_backend::vectorize_with_vtracer(image, config)
             }));
@@ -593,7 +594,7 @@ fn vectorize_engine(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
             }
         }
         Engine::Hybrid => {
-            let t0 = std::time::Instant::now();
+            let t0 = crate::par::instant_now();
             let result = backend::hybrid::vectorize_hybrid(image, config);
             tracing::info!("Hybrid engine completed in {:?}", t0.elapsed());
             result
@@ -637,13 +638,13 @@ pub fn vectorize_with_progress(
 
     let svg = match config.engine {
         Engine::Vtracer => {
-            let t0 = std::time::Instant::now();
+            let t0 = crate::par::instant_now();
             let result = backend::vtracer_backend::vectorize_with_vtracer(image, config);
             tracing::info!("VTracer engine completed in {:?}", t0.elapsed());
             result
         }
         Engine::Hybrid => {
-            let t0 = std::time::Instant::now();
+            let t0 = crate::par::instant_now();
             let result = backend::hybrid::vectorize_hybrid_with_progress(image, config, state);
             tracing::info!("Hybrid engine completed in {:?}", t0.elapsed());
             result
@@ -659,14 +660,14 @@ fn vectorize_native(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
     let width = image.width();
     let height = image.height();
 
-    let t0 = std::time::Instant::now();
+    let t0 = crate::par::instant_now();
 
     // Stage 1: Preprocess (alpha handling, background detection)
     let prepared = preprocess::prepare(image, config);
     tracing::info!("Stage 1 (preprocess): {:?}", t0.elapsed());
 
     // Stage 2: Segment (color quantization + region labeling)
-    let t1 = std::time::Instant::now();
+    let t1 = crate::par::instant_now();
     let segmented = segment::quantize_and_segment(&prepared, config)?;
     tracing::info!(
         "Stage 2 (segment): {:?} — {} colors",
@@ -675,7 +676,7 @@ fn vectorize_native(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
     );
 
     // Stage 3: Trace contours from segmented regions
-    let t2 = std::time::Instant::now();
+    let t2 = crate::par::instant_now();
     let contours = trace::extract_contours(&segmented, config);
     tracing::info!(
         "Stage 3 (trace): {:?} — {} contours",
@@ -689,12 +690,12 @@ fn vectorize_native(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
     }
 
     // Stage 4: Fit Bezier curves to contours
-    let t3 = std::time::Instant::now();
+    let t3 = crate::par::instant_now();
     let paths = fit::fit_curves(&contours, config);
     tracing::info!("Stage 4 (fit): {:?} — {} paths", t3.elapsed(), paths.len());
 
     // Stage 5: Simplify paths
-    let t4 = std::time::Instant::now();
+    let t4 = crate::par::instant_now();
     let paths = simplify::simplify_paths(&paths, config);
     tracing::info!(
         "Stage 5 (simplify): {:?} — {} paths",
@@ -703,7 +704,7 @@ fn vectorize_native(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
     );
 
     // Stage 6: Optimize layer ordering
-    let t5 = std::time::Instant::now();
+    let t5 = crate::par::instant_now();
     let paths = optimize::optimize_layers(&paths, config);
     tracing::info!(
         "Stage 6 (optimize): {:?} — {} paths",
@@ -721,7 +722,7 @@ fn vectorize_native(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
     };
 
     // Stage 7: Output SVG
-    let t6 = std::time::Instant::now();
+    let t6 = crate::par::instant_now();
     let svg = output::to_svg(&paths, width, height, background_color);
     tracing::info!("Stage 7 (output): {:?} — {} bytes", t6.elapsed(), svg.len());
     tracing::info!("Total: {:?} — {} paths", t0.elapsed(), paths.len());

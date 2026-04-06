@@ -10,7 +10,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use image::GrayImage;
-use rayon::prelude::*;
+use crate::par::iter_prelude::*;
 
 use crate::{SegmentedImage, TracedContour, VectorizeConfig};
 
@@ -30,9 +30,9 @@ pub fn extract_contours(
         None
     };
 
-    // Process each color label in parallel
-    (0..num_colors)
-        .into_par_iter()
+    // Process each color label (parallel when available)
+    let label_indices: Vec<usize> = (0..num_colors).collect();
+    crate::par::maybe_into_par_iter!(label_indices)
         .flat_map(|label_idx| {
             let label = label_idx as u32;
 

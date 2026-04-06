@@ -10,7 +10,7 @@ rust-version.workspace = true
 image = { workspace = true }
 imageproc = { workspace = true }
 kurbo = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 palette = { workspace = true }
 geo = { workspace = true }
 rand = { workspace = true }
@@ -25,7 +25,8 @@ serde = { workspace = true }
 # insta = { version = "1", features = ["yaml"] }
 
 [features]
-default = []
+default = ["parallel"]
+parallel = ["dep:rayon"]
 # GPU-accelerated preprocessing (color quantization, edge detection)
 # gpu = ["dep:wgpu"]
 # ML model inference for edge detection, anti-alias recovery

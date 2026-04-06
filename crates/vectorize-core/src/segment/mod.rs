@@ -23,7 +23,7 @@
 )]
 
 use palette::{FromColor, Oklab, Srgb};
-use rayon::prelude::*;
+use crate::par::iter_prelude::*;
 
 use crate::{Color, PreparedImage, Result, SegmentedImage, VectorizeConfig, VectorizeError};
 
@@ -234,9 +234,8 @@ fn kmeans(pixels: &[[f32; 3]], k: usize, max_iter: usize) -> Vec<[f32; 3]> {
     let mut centers = kmeans_plus_plus(pixels, k);
 
     for iteration in 0..max_iter {
-        // Assign each pixel to nearest center (parallel)
-        let assignments: Vec<usize> = pixels
-            .par_iter()
+        // Assign each pixel to nearest center (parallel when available)
+        let assignments: Vec<usize> = crate::par::maybe_par_iter!(pixels)
             .map(|p| {
                 centers
                     .iter()
@@ -815,17 +814,16 @@ pub fn quantize_and_segment(
 
     // ── Assign ALL pixels to nearest center ────────────────────────
 
-    let labels: Vec<u32> = all_oklab
-        .par_iter()
-        .zip(is_opaque.par_iter())
-        .map(|(px, &opaque)| {
-            if !opaque {
+    let pixel_indices: Vec<usize> = (0..all_oklab.len()).collect();
+    let labels: Vec<u32> = crate::par::maybe_par_iter!(pixel_indices)
+        .map(|&idx| {
+            if !is_opaque[idx] {
                 u32::MAX
             } else {
                 centers
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| (i, oklab_dist_sq(px, c)))
+                    .map(|(i, c)| (i, oklab_dist_sq(&all_oklab[idx], c)))
                     .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
                     .map_or(0, |(i, _)| i as u32)
             }
