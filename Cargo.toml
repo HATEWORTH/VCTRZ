@@ -69,8 +69,11 @@ opt-level = 2
 lto = "thin"
 codegen-units = 1
 strip = true
+# unwind needed so catch_unwind works for VTracer panics (especially in WASM)
+panic = "unwind"
 
 # Enable overflow checks for visioncortex in release mode.
 # Without this, integer overflow wraps silently and can cause infinite loops.
 [profile.release.package.visioncortex]
 overflow-checks = true
+
