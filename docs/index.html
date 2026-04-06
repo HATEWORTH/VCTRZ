@@ -100,7 +100,7 @@
     /* ── Main layout ── */
     .app-layout {
       display: flex;
-      height: calc(100vh - 48px - 30px); /* minus titlebar + toolbar + statusbar */
+      height: calc(100vh - 48px - 30px - 20px); /* minus titlebar + toolbar + statusbar + notice */
     }
 
     /* ── Actions panel (right, narrow) ── */
@@ -485,6 +485,11 @@
   <!-- Title bar -->
   <div class="titlebar">
     <span class="titlebar-text">Vectorize</span>
+  </div>
+
+  <!-- Notice -->
+  <div style="background:#2a2a28; padding:3px 8px; font-size:9px; color:#b86b6b; text-align:center; border-bottom:1px solid #282826;">
+    Source images should not exceed 2000&times;2000 pixels. Larger images may freeze the app.
   </div>
 
   <!-- Toolbar -->

@@ -1,6 +1,6 @@
 # VCTRZ
 
-**[Try it in your browser](https://hateworth.github.io/VCTRZ/)**
+**[Try it in your browser](https://hateworth.github.io/VCTRZ/)** — Source images should not exceed 2000x2000 pixels. Larger images may freeze the web app.
 
 A high-quality raster-to-vector (image to SVG) conversion engine written in Rust. Free and open-source alternative to expensive vectorization tools and subscription services.
 
