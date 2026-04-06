@@ -171,11 +171,11 @@ impl Mode {
                 anchor_density: 60.0,
             },
             Mode::HighFidelity => ModeRecipe {
-                color_detail: 95.0,
-                path_precision: 85.0,
-                curve_smoothness: 20.0,
-                noise_filter: 20.0,
-                gradient_layers: 85.0,
+                color_detail: 150.0,
+                path_precision: 150.0,
+                curve_smoothness: 15.0,
+                noise_filter: 5.0,
+                gradient_layers: 90.0,
                 preferred_engine: Engine::Hybrid,
                 simplify_method: SimplifyMethod::KurboBezier,
                 detect_shapes: true,
@@ -187,10 +187,10 @@ impl Mode {
 
                 tones_per_hue: 0,
                 color_count_range: (128, 512),
-                min_area: 5,
+                min_area: 2,
                 edge_smoothing: 0.3,
                 color_threshold: 50.0,
-                anchor_density: 80.0,
+                anchor_density: 90.0,
             },
             Mode::Sketch => ModeRecipe {
                 color_detail: 25.0,
@@ -404,14 +404,13 @@ impl QualitySettings {
     // ── Internal mapping to vtracer parameters ──────────────────────
 
     /// VTracer color_precision: bits per channel (1-8).
-    /// Color Detail 0→4 bits, 100→8 bits, 100+→8 bits (maxed).
+    /// Color Detail 0→4 bits, 50→6 bits, 80+→8 bits (max).
     pub(crate) fn vtracer_color_precision(&self) -> i32 {
         let clamped = self.color_detail.min(100.0);
-        // High color detail (≥80) always gets max precision
-        if clamped >= 80.0 {
+        if clamped >= 60.0 {
             8
         } else {
-            lerp_i32(clamped, 4, 8)
+            lerp_i32(clamped * 100.0 / 60.0, 4, 8)
         }
     }
 
@@ -427,28 +426,36 @@ impl QualitySettings {
 
     /// VTracer filter_speckle: side length of minimum feature to keep.
     /// VTracer squares this internally to get area.
-    /// Compressed range: full 0-100 slider maps to 0-5 speckle side length.
-    /// Beyond ~5, shapes start breaking noticeably.
+    /// Low values preserve fine detail (hatching, thin lines, text).
     pub(crate) fn vtracer_filter_speckle(&self) -> usize {
-        // 0→0, 50→2, 100→5
-        lerp_usize(self.noise_filter, 0, 5)
+        // 0-20→0 (keep everything), 50→2, 100→4, 200→8
+        if self.noise_filter < 20.0 {
+            0
+        } else {
+            lerp_usize((self.noise_filter - 20.0) * 100.0 / 180.0, 0, 8)
+        }
     }
 
     /// VTracer layer_difference: color difference between gradient layers.
-    /// Lower = more gradient steps = more layers.
+    /// Lower = more gradient steps = more layers = finer detail.
     /// Both gradient_layers AND color_detail influence this — whichever
     /// demands more detail wins (lower layer_difference).
     pub(crate) fn vtracer_layer_difference(&self) -> i32 {
-        // Gradient layers: 0→128, 100→1, 200→1
+        // Gradient layers: 0→128, 50→16, 100→1
         let gl_clamped = self.gradient_layers.min(100.0);
-        let from_gl = lerp_i32(100.0 - gl_clamped, 1, 128);
-        // Color detail also pushes layer_difference down at high values.
-        // 0→128 (no effect), 100→8, 200→1
-        let cd_clamped = self.color_detail.min(200.0);
-        let from_cd = if cd_clamped <= 50.0 {
-            128 // No effect at low color detail
+        let from_gl = if gl_clamped >= 80.0 {
+            1
         } else {
-            lerp_i32(200.0 - cd_clamped, 1, 128)
+            lerp_i32(100.0 - gl_clamped, 1, 128)
+        };
+        // Color detail: 0→128, 50→32, 100→4, 150→2, 200→1
+        let cd_clamped = self.color_detail.min(200.0);
+        let from_cd = if cd_clamped <= 20.0 {
+            128
+        } else if cd_clamped >= 150.0 {
+            1
+        } else {
+            lerp_i32((150.0 - cd_clamped) * 100.0 / 130.0, 1, 128)
         };
         // Take the minimum (more detail wins).
         from_gl.min(from_cd).max(1)
@@ -609,10 +616,13 @@ impl QualitySettings {
     }
 
     /// VTracer path_precision: decimal places in SVG output.
+    /// Higher = more coordinate precision = tighter paths.
     pub(crate) fn vtracer_path_precision(&self) -> Option<u32> {
-        if self.path_precision > 80.0 {
+        if self.path_precision > 120.0 {
+            Some(4)
+        } else if self.path_precision > 60.0 {
             Some(3)
-        } else if self.path_precision > 40.0 {
+        } else if self.path_precision > 30.0 {
             Some(2)
         } else {
             Some(1)
