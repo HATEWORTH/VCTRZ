@@ -136,8 +136,9 @@ fn auto_color_count(pixels: &[[f32; 3]], max_colors: u32) -> u32 {
         3..=4 => 7 + (peaks as u32 - 3),     // 7-8
         5..=6 => 9 + (peaks as u32 - 5),     // 9-10
         7..=10 => (peaks as u32) * 2,        // 14-20
-        11..=16 => (peaks as u32) * 2 + 4,   // 26-36
-        _ => (peaks as u32 * 2 + 8).min(64), // up to 64
+        11..=16 => (peaks as u32) * 3 + 4,   // 37-52
+        17..=24 => (peaks as u32) * 4,       // 68-96
+        _ => (peaks as u32 * 5).min(max_colors), // scale with complexity
     };
 
     // Determine if this is a truly simple image (like solid-color logos)
@@ -151,7 +152,7 @@ fn auto_color_count(pixels: &[[f32; 3]], max_colors: u32) -> u32 {
     // Exception: truly bimodal images (e.g. black logos on solid bg)
     // can use fewer colors.
     let floor = if is_truly_bimodal { 2 } else { 6 };
-    let capped = suggested.clamp(floor, max_colors.min(64));
+    let capped = suggested.clamp(floor, max_colors);
 
     tracing::debug!(
         "Auto color count: L={} a={} b={} peaks (max {}) → suggested {} → capped {}",

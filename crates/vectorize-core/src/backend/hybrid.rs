@@ -401,12 +401,11 @@ fn chaikin_step(points: &[kurbo::Point], closed: bool) -> Vec<kurbo::Point> {
     deduped
 }
 
-/// Re-fit a single path using kurbo's simplify, returning the simplified SVG `d` string.
-/// Maximum number of path elements before we skip refitting.
-/// kurbo's simplify_bezpath can hang even on 40-element paths with
-/// pathological geometry. Keep very conservative to prevent freezes.
-const MAX_REFIT_ELEMENTS: usize = 80;
+/// Maximum elements per chunk for simplify_bezpath.
+/// Large paths are split into chunks this size to avoid kurbo's O(n^3) hang.
+const MAX_SIMPLIFY_CHUNK: usize = 60;
 
+/// Re-fit a single path using kurbo's simplify, returning the simplified path.
 /// Returns `None` if parsing fails.
 fn refit_path(d: &str, tolerance: f64, angle_thresh: f64, smooth_iters: u32, translate: (f64, f64)) -> Option<kurbo::BezPath> {
     let mut bez = kurbo::BezPath::from_svg(d).ok()?;
@@ -422,8 +421,8 @@ fn refit_path(d: &str, tolerance: f64, angle_thresh: f64, smooth_iters: u32, tra
     let elem_count = bez.elements().len();
 
     // Scale tolerance based on element count:
-    // Small paths (< 50 elements) are fine features (text serifs, thin lines) — tighter fit.
-    // Large paths (> 200 elements) are broad regions — more smoothing is OK.
+    // Small paths (< 50 elements) are fine features — tighter fit.
+    // Large paths (> 200 elements) are broad regions — more smoothing OK.
     let tolerance = if elem_count < 50 {
         tolerance * 0.5
     } else if elem_count > 200 {
@@ -432,18 +431,140 @@ fn refit_path(d: &str, tolerance: f64, angle_thresh: f64, smooth_iters: u32, tra
         tolerance
     };
 
-    // kurbo's simplify_bezpath has an unbounded runtime bug — it can hang
-    // indefinitely on paths with certain geometry, even small ones (40 elements).
-    // Instead of risking a freeze, we skip simplify entirely and just apply
-    // Chaikin smoothing which is O(n) and always terminates.
+    // Apply Chaikin smoothing first if requested (pixel staircase removal)
     if smooth_iters > 0 {
-        let mut smoothed = chaikin_smooth(&bez, smooth_iters);
-        ensure_all_subpaths_closed(&mut smoothed);
-        return Some(smoothed);
+        bez = chaikin_smooth(&bez, smooth_iters);
     }
 
-    ensure_all_subpaths_closed(&mut bez);
-    Some(bez)
+    // Now apply kurbo simplify_bezpath for proper bezier fitting.
+    // Split large paths into chunks to avoid kurbo's O(n^3) runtime.
+    let simplified = simplify_path_safe(&bez, tolerance, angle_thresh);
+
+    let mut result = simplified;
+    ensure_all_subpaths_closed(&mut result);
+    Some(result)
+}
+
+/// Safely simplify a BezPath by splitting into sub-paths and chunking large ones.
+/// kurbo's simplify_bezpath can hang on paths with >60 elements due to O(n^3)
+/// behavior. This function splits at natural sub-path boundaries first, then
+/// chunks any sub-path that exceeds MAX_SIMPLIFY_CHUNK.
+fn simplify_path_safe(path: &kurbo::BezPath, tolerance: f64, angle_thresh: f64) -> kurbo::BezPath {
+    let opts = SimplifyOptions::default().angle_thresh(angle_thresh);
+
+    // Split into natural sub-paths (at MoveTo boundaries)
+    let subpaths = split_into_subpaths(path);
+    let mut result = kurbo::BezPath::new();
+
+    for subpath in &subpaths {
+        let elem_count = subpath.elements().len();
+
+        if elem_count <= MAX_SIMPLIFY_CHUNK {
+            // Small enough — simplify directly (with panic guard)
+            let simplified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                simplify_bezpath(subpath.elements().iter().copied(), tolerance, &opts)
+            }));
+            match simplified {
+                Ok(s) => {
+                    for el in s.elements() {
+                        result.push(*el);
+                    }
+                }
+                Err(_) => {
+                    // Simplify panicked — use original sub-path
+                    for el in subpath.elements() {
+                        result.push(*el);
+                    }
+                }
+            }
+        } else {
+            // Too large — flatten to polyline, chunk, simplify each chunk, rejoin
+            let elements = subpath.elements().to_vec();
+            let mut chunk_start = 0;
+
+            while chunk_start < elements.len() {
+                let chunk_end = (chunk_start + MAX_SIMPLIFY_CHUNK).min(elements.len());
+
+                // Build chunk BezPath
+                let mut chunk = kurbo::BezPath::new();
+                for el in &elements[chunk_start..chunk_end] {
+                    chunk.push(*el);
+                }
+
+                // Ensure chunk starts with MoveTo
+                if !chunk.elements().is_empty() {
+                    if !matches!(chunk.elements()[0], kurbo::PathEl::MoveTo(_)) {
+                        // Prepend a MoveTo from the previous element's endpoint
+                        let start_pt = if chunk_start > 0 {
+                            endpoint_of(&elements[chunk_start - 1])
+                        } else {
+                            kurbo::Point::ZERO
+                        };
+                        let mut fixed = kurbo::BezPath::new();
+                        fixed.move_to(start_pt);
+                        for el in chunk.elements() {
+                            fixed.push(*el);
+                        }
+                        chunk = fixed;
+                    }
+                }
+
+                let simplified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    simplify_bezpath(chunk.elements().iter().copied(), tolerance, &opts)
+                }));
+
+                match simplified {
+                    Ok(s) => {
+                        // Skip the MoveTo of subsequent chunks to avoid gaps
+                        let skip = if chunk_start > 0 { 1 } else { 0 };
+                        for el in s.elements().iter().skip(skip) {
+                            result.push(*el);
+                        }
+                    }
+                    Err(_) => {
+                        let skip = if chunk_start > 0 { 1 } else { 0 };
+                        for el in chunk.elements().iter().skip(skip) {
+                            result.push(*el);
+                        }
+                    }
+                }
+
+                chunk_start = chunk_end;
+            }
+        }
+    }
+
+    result
+}
+
+/// Split a BezPath into individual sub-paths (one per MoveTo).
+fn split_into_subpaths(path: &kurbo::BezPath) -> Vec<kurbo::BezPath> {
+    let mut subpaths = Vec::new();
+    let mut current = kurbo::BezPath::new();
+
+    for el in path.elements() {
+        if matches!(el, kurbo::PathEl::MoveTo(_)) && !current.elements().is_empty() {
+            subpaths.push(current);
+            current = kurbo::BezPath::new();
+        }
+        current.push(*el);
+    }
+
+    if !current.elements().is_empty() {
+        subpaths.push(current);
+    }
+
+    subpaths
+}
+
+/// Get the endpoint of a path element.
+fn endpoint_of(el: &kurbo::PathEl) -> kurbo::Point {
+    match *el {
+        kurbo::PathEl::MoveTo(p) | kurbo::PathEl::LineTo(p) => p,
+        kurbo::PathEl::QuadTo(_, p) => p,
+        kurbo::PathEl::CurveTo(_, _, p) => p,
+        kurbo::PathEl::ClosePath => kurbo::Point::ZERO,
+    }
 }
 
 /// Ensure every subpath in a BezPath ends with ClosePath.
