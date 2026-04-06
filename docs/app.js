@@ -242,16 +242,59 @@ function showOutputPreview() {
 // ── Build config ──
 
 function buildConfig() {
+  // Quality sliders (QualitySettings fields)
   const quality = {};
-  document.querySelectorAll("input[data-param]").forEach((slider) => {
-    const param = slider.dataset.param;
-    let val = parseFloat(slider.value);
-    // edge_smoothing is stored as x10 int in the slider
-    if (param === "edge_smoothing") val = val / 10;
-    quality[param] = val;
+  const qualityParams = [
+    "color_detail", "path_precision", "curve_smoothness",
+    "noise_filter", "gradient_layers",
+    "shadow_detail", "midtone_detail", "highlight_detail"
+  ];
+  qualityParams.forEach((param) => {
+    const slider = document.querySelector(`input[data-param="${param}"]`);
+    if (slider) quality[param] = parseFloat(slider.value);
   });
 
-  return { mode: currentMode, quality };
+  // Pipeline parameters (top-level config fields)
+  const getSlider = (param) => {
+    const el = document.querySelector(`input[data-param="${param}"]`);
+    return el ? parseFloat(el.value) : undefined;
+  };
+
+  const edgeRaw = getSlider("edge_smoothing");
+  const edge_smoothing = edgeRaw !== undefined ? edgeRaw / 10 : undefined;
+
+  // Checkboxes
+  const isChecked = (name) => {
+    const el = document.querySelector(`[data-check="${name}"]`);
+    return el ? el.classList.contains("checked") : undefined;
+  };
+
+  // Layer mode
+  const activeLayer = document.querySelector("[data-layer].active");
+  const layer_mode = activeLayer ? activeLayer.dataset.layer : undefined;
+
+  // Simplify method
+  const activeSimplify = document.querySelector("[data-simplify].active");
+  const simplify_method = activeSimplify ? activeSimplify.dataset.simplify : undefined;
+
+  return {
+    mode: currentMode,
+    engine: currentEngine,
+    quality,
+    anchor_density: getSlider("anchor_density"),
+    edge_smoothing,
+    color_threshold: getSlider("color_threshold"),
+    min_area: getSlider("min_area"),
+    tones_per_hue: getSlider("tones_per_hue"),
+    detect_shapes: isChecked("detect_shapes"),
+    extract_lines: isChecked("extract_lines"),
+    merge_paths: isChecked("merge_paths"),
+    flatten_background: isChecked("flatten_background"),
+    skip_transparent: isChecked("skip_transparent"),
+    snap_curves_to_lines: isChecked("snap_curves_to_lines"),
+    layer_mode,
+    simplify_method,
+  };
 }
 
 // ── Vectorize ──

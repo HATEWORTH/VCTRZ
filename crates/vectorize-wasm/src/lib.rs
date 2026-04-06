@@ -6,11 +6,33 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
-/// Partial config passed from JS — only the fields the web UI exposes.
+/// Full config passed from JS — mirrors all controls the web UI exposes.
 #[derive(serde::Deserialize)]
 struct JsConfig {
     mode: Option<String>,
+    engine: Option<String>,
     quality: Option<JsQuality>,
+
+    // Pipeline parameters
+    anchor_density: Option<f64>,
+    edge_smoothing: Option<f64>,
+    color_threshold: Option<f64>,
+    min_area: Option<u32>,
+    tones_per_hue: Option<u8>,
+
+    // Feature toggles
+    detect_shapes: Option<bool>,
+    extract_lines: Option<bool>,
+    merge_paths: Option<bool>,
+    flatten_background: Option<bool>,
+    skip_transparent: Option<bool>,
+    snap_curves_to_lines: Option<bool>,
+    create_fills: Option<bool>,
+    create_strokes: Option<bool>,
+
+    // Algorithm selection
+    layer_mode: Option<String>,
+    simplify_method: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -26,7 +48,6 @@ struct JsQuality {
 }
 
 /// Maximum pixels allowed in WASM (single-threaded, limited memory).
-/// 4000x4000 = 16M pixels. Larger images should be resized client-side.
 const MAX_PIXELS: u32 = 16_000_000;
 
 /// Vectorize image bytes to SVG string.
@@ -35,15 +56,15 @@ const MAX_PIXELS: u32 = 16_000_000;
 /// Returns an SVG string.
 #[wasm_bindgen]
 pub fn vectorize(data: &[u8], config_js: JsValue) -> Result<String, JsError> {
-    // Parse the partial JS config
-    let js_config: Option<JsConfig> = if config_js.is_undefined() || config_js.is_null() {
+    // Parse the JS config
+    let js: Option<JsConfig> = if config_js.is_undefined() || config_js.is_null() {
         None
     } else {
         Some(serde_wasm_bindgen::from_value(config_js).map_err(|e| JsError::new(&e.to_string()))?)
     };
 
-    // Build a full config from mode recipe (just like CLI does)
-    let mode = js_config
+    // Build a full config from mode recipe (just like CLI/GUI does)
+    let mode = js
         .as_ref()
         .and_then(|c| c.mode.as_deref())
         .map(|m| m.parse().unwrap_or(vectorize_core::quality::Mode::Logo))
@@ -53,8 +74,17 @@ pub fn vectorize(data: &[u8], config_js: JsValue) -> Result<String, JsError> {
     let mut config = recipe.to_config();
     config.mode = mode;
 
-    // Apply quality overrides from JS sliders
-    if let Some(ref js) = js_config {
+    if let Some(ref js) = js {
+        // Engine
+        if let Some(ref e) = js.engine {
+            config.engine = match e.as_str() {
+                "Hybrid" => vectorize_core::Engine::Hybrid,
+                "Native" => vectorize_core::Engine::Native,
+                _ => vectorize_core::Engine::Vtracer,
+            };
+        }
+
+        // Quality sliders
         if let Some(ref q) = js.quality {
             if let Some(v) = q.color_detail { config.quality.color_detail = v; }
             if let Some(v) = q.path_precision { config.quality.path_precision = v; }
@@ -65,10 +95,40 @@ pub fn vectorize(data: &[u8], config_js: JsValue) -> Result<String, JsError> {
             if let Some(v) = q.midtone_detail { config.quality.midtone_detail = v; }
             if let Some(v) = q.highlight_detail { config.quality.highlight_detail = v; }
         }
+
+        // Pipeline parameters
+        if let Some(v) = js.anchor_density { config.anchor_density = v; }
+        if let Some(v) = js.edge_smoothing { config.edge_smoothing = v; }
+        if let Some(v) = js.color_threshold { config.color_threshold = v; }
+        if let Some(v) = js.min_area { config.min_area = v; }
+        if let Some(v) = js.tones_per_hue { config.tones_per_hue = v; }
+
+        // Feature toggles
+        if let Some(v) = js.detect_shapes { config.detect_shapes = v; }
+        if let Some(v) = js.extract_lines { config.extract_lines = v; }
+        if let Some(v) = js.merge_paths { config.merge_paths = v; }
+        if let Some(v) = js.flatten_background { config.flatten_background = v; }
+        if let Some(v) = js.skip_transparent { config.skip_transparent = v; }
+        if let Some(v) = js.snap_curves_to_lines { config.snap_curves_to_lines = v; }
+        if let Some(v) = js.create_fills { config.create_fills = v; }
+        if let Some(v) = js.create_strokes { config.create_strokes = v; }
+
+        // Algorithm selection
+        if let Some(ref v) = js.layer_mode {
+            config.layer_mode = match v.as_str() {
+                "Cutout" => vectorize_core::LayerMode::Cutout,
+                _ => vectorize_core::LayerMode::Stacked,
+            };
+        }
+        if let Some(ref v) = js.simplify_method {
+            config.simplify_method = match v.as_str() {
+                "visvalingam" => vectorize_core::SimplifyMethod::VisvalingamWhyatt,
+                _ => vectorize_core::SimplifyMethod::KurboBezier,
+            };
+        }
     }
 
-    // NOTE: image::open() does not work in WASM (no filesystem).
-    // Always use load_from_memory with byte slices passed from JS.
+    // Decode image (no filesystem in WASM)
     let img =
         image::load_from_memory(data).map_err(|e| JsError::new(&format!("decode: {e}")))?;
 
