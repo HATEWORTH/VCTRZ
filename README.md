@@ -1,5 +1,7 @@
 # VCTRZ
 
+**[Try it in your browser](https://hateworth.github.io/VCTRZ/)**
+
 A high-quality raster-to-vector (image to SVG) conversion engine written in Rust. Free and open-source alternative to expensive vectorization tools and subscription services.
 
 **Multi-target:** Desktop GUI, CLI, Rust library, Python package (PyO3), WebAssembly.
