@@ -18,6 +18,8 @@ serde-wasm-bindgen = "0.6"
 serde = { workspace = true }
 # console_error_panic_hook — surface Rust panics as readable JS errors
 console_error_panic_hook = "0.1"
+# getrandom needs "js" feature for wasm32-unknown-unknown targets
+getrandom = { version = "0.2", features = ["js"] }
 
 [lints]
 workspace = true
