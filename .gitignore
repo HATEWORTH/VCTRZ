@@ -26,3 +26,6 @@ Thumbs.db
 
 # Nested repo
 VCTRZ/
+
+# Reference repos (local clones, not submodules)
+reference/
