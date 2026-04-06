@@ -25,6 +25,10 @@ struct JsQuality {
     highlight_detail: Option<f32>,
 }
 
+/// Maximum pixels allowed in WASM (single-threaded, limited memory).
+/// 4000x4000 = 16M pixels. Larger images should be resized client-side.
+const MAX_PIXELS: u32 = 16_000_000;
+
 /// Vectorize image bytes to SVG string.
 ///
 /// Pass the raw file bytes (PNG, JPEG, etc.) — NOT decoded pixel data.
@@ -68,5 +72,29 @@ pub fn vectorize(data: &[u8], config_js: JsValue) -> Result<String, JsError> {
     let img =
         image::load_from_memory(data).map_err(|e| JsError::new(&format!("decode: {e}")))?;
 
-    vectorize_core::vectorize(&img, &config).map_err(|e| JsError::new(&e.to_string()))
+    // Check image size — WASM is single-threaded with limited memory
+    let pixels = img.width() * img.height();
+    if pixels > MAX_PIXELS {
+        return Err(JsError::new(&format!(
+            "Image too large for browser: {}x{} ({:.1}M pixels). Max is {:.0}M pixels. \
+             Please resize the image before uploading.",
+            img.width(), img.height(),
+            pixels as f64 / 1_000_000.0,
+            MAX_PIXELS as f64 / 1_000_000.0
+        )));
+    }
+
+    // Wrap in catch_unwind to turn panics into error messages
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        vectorize_core::vectorize(&img, &config)
+    }));
+
+    match result {
+        Ok(Ok(svg)) => Ok(svg),
+        Ok(Err(e)) => Err(JsError::new(&e.to_string())),
+        Err(_) => Err(JsError::new(
+            "Vectorization crashed. Try a smaller image, fewer colors (lower Color Detail), \
+             or a different mode."
+        )),
+    }
 }
