@@ -3,426 +3,672 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vectorize — Image to SVG Converter</title>
+  <title>Vectorize — Image to SVG</title>
   <style>
+    /* ── Trilithium palette (from theme.rs) ── */
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2a2d3a;
-      --text: #e4e4e7;
-      --text-dim: #8b8d98;
-      --accent: #6366f1;
-      --accent-hover: #818cf8;
-      --success: #22c55e;
-      --error: #ef4444;
+      --bg-metal: #3a3a38;
+      --bg-dark: #2a2a28;
+      --panel-bg: #1a1c1a;
+      --btn-face: #585856;
+      --btn-light: #70706e;
+      --btn-shadow: #282826;
+      --btn-text: #c0c0b8;
+      --text-dim: #d0d0c8;
+      --text-lcd: #d0d0c8;
+      --border-in: #606060;
+      --retro-amber: #c4884d;
+      --retro-teal: #6b9b5a;
+      --retro-rose: #b86b6b;
+      --retro-cream: #d8c8a0;
+      --retro-purple: #5b7ba8;
+      --retro-violet: #8a6b96;
+      --retro-yellow: #c8a858;
+      --grip-hi: #50504e;
+      --grip-lo: #1a1a18;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+      background: var(--bg-metal);
+      color: var(--text-lcd);
       min-height: 100vh;
-    }
-
-    header {
-      padding: 1.5rem 2rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    header h1 {
-      font-size: 1.4rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-
-    header span {
-      color: var(--text-dim);
-      font-size: 0.85rem;
-    }
-
-    .app {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      height: calc(100vh - 65px);
-    }
-
-    /* Sidebar */
-    .sidebar {
-      border-right: 1px solid var(--border);
-      padding: 1.5rem;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .section-title {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-dim);
-      margin-bottom: 0.75rem;
-    }
-
-    /* Drop zone */
-    .dropzone {
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 2rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-    }
-
-    .dropzone:hover, .dropzone.dragover {
-      border-color: var(--accent);
-      background: rgba(99, 102, 241, 0.05);
-    }
-
-    .dropzone p { color: var(--text-dim); font-size: 0.9rem; }
-    .dropzone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
-
-    .dropzone input[type="file"] { display: none; }
-
-    /* Mode selector */
-    .mode-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.5rem;
-    }
-
-    .mode-btn {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.6rem 0.5rem;
-      color: var(--text);
-      font-size: 0.78rem;
-      cursor: pointer;
-      transition: all 0.15s;
-      text-align: center;
-    }
-
-    .mode-btn:hover { border-color: var(--accent); }
-    .mode-btn.active {
-      border-color: var(--accent);
-      background: rgba(99, 102, 241, 0.15);
-      color: var(--accent-hover);
-    }
-
-    /* Sliders */
-    .slider-group { display: flex; flex-direction: column; gap: 0.9rem; }
-
-    .slider-row {
-      display: flex;
-      flex-direction: column;
-      gap: 0.3rem;
-    }
-
-    .slider-row label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.8rem;
-      color: var(--text-dim);
-    }
-
-    .slider-row label span { color: var(--text); font-variant-numeric: tabular-nums; }
-
-    input[type="range"] {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 4px;
-      border-radius: 2px;
-      background: var(--border);
-      outline: none;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: var(--accent);
-      cursor: pointer;
-    }
-
-    /* Vectorize button */
-    .btn-vectorize {
-      width: 100%;
-      padding: 0.85rem;
-      border: none;
-      border-radius: 10px;
-      background: var(--accent);
-      color: #fff;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-vectorize:hover { background: var(--accent-hover); }
-    .btn-vectorize:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* Status */
-    .status {
-      font-size: 0.82rem;
-      color: var(--text-dim);
-      min-height: 1.5em;
-    }
-
-    .status.error { color: var(--error); }
-    .status.success { color: var(--success); }
-
-    /* Main area */
-    .main {
-      display: flex;
-      flex-direction: column;
       overflow: hidden;
     }
 
-    .preview-tabs {
+    /* ── Title bar ── */
+    .titlebar {
+      height: 22px;
+      background: var(--bg-dark);
       display: flex;
-      border-bottom: 1px solid var(--border);
-      padding: 0 1rem;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      user-select: none;
     }
 
-    .preview-tab {
-      padding: 0.75rem 1.25rem;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
+    .titlebar-text {
+      font-size: 12px;
       color: var(--text-dim);
-      font-size: 0.85rem;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      height: 26px;
+      background: var(--bg-metal);
+      border-top: 1px solid var(--btn-light);
+      border-bottom: 1px solid var(--btn-shadow);
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      gap: 3px;
+    }
+
+    /* ── Bevel button base ── */
+    .btn-raised, .btn-toggle {
+      font-family: inherit;
+      font-size: 10px;
+      color: var(--btn-text);
+      background: var(--btn-face);
+      border: none;
+      padding: 2px 10px;
+      height: 18px;
       cursor: pointer;
-      transition: all 0.15s;
+      border-top: 1px solid var(--btn-light);
+      border-left: 1px solid var(--btn-light);
+      border-right: 1px solid var(--btn-shadow);
+      border-bottom: 1px solid var(--btn-shadow);
+      white-space: nowrap;
     }
 
-    .preview-tab:hover { color: var(--text); }
-    .preview-tab.active {
-      color: var(--accent-hover);
-      border-bottom-color: var(--accent);
+    .btn-raised:hover { background: var(--btn-light); }
+    .btn-raised:active, .btn-toggle.active {
+      background: var(--bg-dark);
+      border-top-color: var(--btn-shadow);
+      border-left-color: var(--btn-shadow);
+      border-right-color: var(--btn-light);
+      border-bottom-color: var(--btn-light);
     }
 
-    .preview-area {
+    .btn-toggle.active { color: var(--retro-teal); }
+    .btn-toggle:hover:not(.active) { background: var(--btn-light); }
+
+    .toolbar-spacer { width: 6px; }
+
+    /* ── Main layout ── */
+    .app-layout {
+      display: flex;
+      height: calc(100vh - 48px - 30px); /* minus titlebar + toolbar + statusbar */
+    }
+
+    /* ── Actions panel (right, narrow) ── */
+    .actions-panel {
+      width: 100px;
+      background: var(--bg-metal);
+      padding: 6px;
+      border-left: 1px solid var(--btn-shadow);
+      display: flex;
+      flex-direction: column;
+      order: 3;
+    }
+
+    .actions-panel .btn-toggle,
+    .actions-panel .btn-raised {
+      width: 100%;
+      margin-bottom: 2px;
+    }
+
+    /* ── Settings panel (right) ── */
+    .settings-panel {
+      width: 280px;
+      background: var(--bg-metal);
+      padding: 4px 10px;
+      border-left: 1px solid var(--btn-shadow);
+      overflow-y: auto;
+      order: 2;
+    }
+
+    /* ── Section header ── */
+    .section-header {
+      font-size: 12px;
+      color: var(--btn-text);
+      margin: 6px 0 2px;
+    }
+
+    /* ── Inset panel ── */
+    .inset {
+      background: var(--panel-bg);
+      border-top: 1px solid var(--btn-shadow);
+      border-left: 1px solid var(--btn-shadow);
+      border-right: 1px solid var(--btn-light);
+      border-bottom: 1px solid var(--btn-light);
+      padding: 4px 6px;
+      margin-bottom: 4px;
+    }
+
+    /* ── Slider rows ── */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      height: 18px;
+      margin: 1px 0;
+    }
+
+    .slider-label {
+      width: 110px;
+      font-size: 9px;
+      color: var(--retro-amber);
+      flex-shrink: 0;
+    }
+
+    .slider-row input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
       flex: 1;
+      height: 4px;
+      background: #30302e;
+      outline: none;
+      margin: 0 4px;
+    }
+
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 6px;
+      height: 14px;
+      background: var(--retro-amber);
+      cursor: pointer;
+      border: none;
+    }
+
+    .slider-row input[type="range"]::-moz-range-thumb {
+      width: 6px;
+      height: 14px;
+      background: var(--retro-amber);
+      cursor: pointer;
+      border: none;
+      border-radius: 0;
+    }
+
+    .slider-value {
+      width: 32px;
+      font-size: 9px;
+      text-align: right;
+      color: var(--retro-amber);
+      flex-shrink: 0;
+    }
+
+    /* Slider color variants */
+    .slider-row.green .slider-label,
+    .slider-row.green .slider-value { color: var(--retro-teal); }
+    .slider-row.green input::-webkit-slider-thumb { background: var(--retro-teal); }
+    .slider-row.green input::-moz-range-thumb { background: var(--retro-teal); }
+
+    .slider-row.purple .slider-label,
+    .slider-row.purple .slider-value { color: var(--retro-violet); }
+    .slider-row.purple input::-webkit-slider-thumb { background: var(--retro-violet); }
+    .slider-row.purple input::-moz-range-thumb { background: var(--retro-violet); }
+
+    .slider-row.yellow .slider-label,
+    .slider-row.yellow .slider-value { color: var(--retro-yellow); }
+    .slider-row.yellow input::-webkit-slider-thumb { background: var(--retro-yellow); }
+    .slider-row.yellow input::-moz-range-thumb { background: var(--retro-yellow); }
+
+    .slider-row.red .slider-label,
+    .slider-row.red .slider-value { color: var(--retro-rose); }
+    .slider-row.red input::-webkit-slider-thumb { background: var(--retro-rose); }
+    .slider-row.red input::-moz-range-thumb { background: var(--retro-rose); }
+
+    .slider-row.blue .slider-label,
+    .slider-row.blue .slider-value { color: var(--retro-purple); }
+    .slider-row.blue input::-webkit-slider-thumb { background: var(--retro-purple); }
+    .slider-row.blue input::-moz-range-thumb { background: var(--retro-purple); }
+
+    .slider-row.disabled .slider-label,
+    .slider-row.disabled .slider-value { color: #555550; }
+    .slider-row.disabled input::-webkit-slider-thumb { background: #555550; }
+    .slider-row.disabled input::-moz-range-thumb { background: #555550; }
+    .slider-row.disabled input { pointer-events: none; }
+
+    /* ── Checkboxes ── */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      height: 16px;
+      margin: 1px 0;
+      cursor: pointer;
+      font-size: 10px;
+      color: var(--retro-cream);
+      user-select: none;
+    }
+
+    .checkbox-box {
+      width: 12px;
+      height: 12px;
+      background: var(--btn-face);
+      border-top: 1px solid var(--btn-shadow);
+      border-left: 1px solid var(--btn-shadow);
+      border-right: 1px solid var(--btn-light);
+      border-bottom: 1px solid var(--btn-light);
+      margin-right: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .checkbox-row.checked .checkbox-box {
+      background: #2e3a2a;
+      color: var(--retro-teal);
+      font-size: 10px;
+    }
+
+    .checkbox-row.checked { color: var(--retro-teal); }
+
+    /* ── Toggle row (evenly spaced) ── */
+    .toggle-row {
+      display: flex;
+      gap: 2px;
+      margin: 2px 0;
+    }
+
+    .toggle-row .btn-toggle { flex: 1; text-align: center; }
+
+    /* ── Advanced collapse ── */
+    .collapse-header {
+      font-size: 11px;
+      color: #b4b4b4;
+      cursor: pointer;
+      user-select: none;
+      margin: 4px 0 2px;
+    }
+
+    .collapse-body { display: none; }
+    .collapse-body.open { display: block; }
+
+    /* ── Vectorize button ── */
+    .btn-vectorize {
+      width: 100%;
+      height: 24px;
+      font-family: inherit;
+      font-size: 11px;
+      color: white;
+      background: #4a8a4a;
+      border-top: 1px solid var(--btn-light);
+      border-left: 1px solid var(--btn-light);
+      border-right: 1px solid var(--btn-shadow);
+      border-bottom: 1px solid var(--btn-shadow);
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .btn-vectorize:hover { background: #5a9a5a; }
+    .btn-vectorize:active {
+      background: #386a38;
+      border-top-color: var(--btn-shadow);
+      border-left-color: var(--btn-shadow);
+      border-right-color: var(--btn-light);
+      border-bottom-color: var(--btn-light);
+    }
+
+    .btn-vectorize:disabled {
+      background: var(--btn-face);
+      color: var(--text-dim);
+      cursor: default;
+    }
+
+    /* ── Log box ── */
+    .log-box {
+      background: var(--panel-bg);
+      border-top: 1px solid var(--btn-shadow);
+      border-left: 1px solid var(--btn-shadow);
+      border-right: 1px solid var(--btn-light);
+      border-bottom: 1px solid var(--btn-light);
+      padding: 4px 6px;
+      height: 80px;
+      overflow-y: auto;
+      font-size: 9px;
+      color: var(--text-lcd);
+      margin-bottom: 4px;
+    }
+
+    .log-box p { margin: 0; line-height: 1.4; }
+
+    /* ── Central panel ── */
+    .central-panel {
+      flex: 1;
+      background: var(--bg-metal);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      order: 1;
+      min-width: 0;
+    }
+
+    .viewport {
+      flex: 1;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--btn-shadow);
+      border-left: 1px solid var(--btn-shadow);
+      border-right: 1px solid var(--btn-light);
+      border-bottom: 1px solid var(--btn-light);
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: auto;
-      padding: 2rem;
-      background: repeating-conic-gradient(#1e2130 0% 25%, #181b28 0% 50%) 0 0 / 20px 20px;
+      position: relative;
     }
 
-    .preview-area img,
-    .preview-area .svg-container {
+    .viewport img,
+    .viewport .svg-container {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
     }
 
-    .preview-area .svg-container svg {
+    .viewport .svg-container svg {
       max-width: 100%;
-      max-height: calc(100vh - 180px);
+      max-height: 100%;
     }
 
-    .placeholder {
-      color: var(--text-dim);
-      font-size: 0.95rem;
+    .viewport .placeholder {
+      color: var(--text-lcd);
+      font-size: 14px;
+    }
+
+    .viewport .info-overlay {
+      position: absolute;
+      bottom: 4px;
+      right: 8px;
+      font-size: 10px;
+      color: var(--text-lcd);
+    }
+
+    /* ── Drop zone ── */
+    .dropzone {
+      border: 2px dashed var(--border-in);
+      padding: 16px 8px;
       text-align: center;
+      cursor: pointer;
+      margin-bottom: 4px;
+      color: var(--text-dim);
+      font-size: 10px;
     }
 
-    /* Download bar */
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--retro-teal);
+      background: rgba(107, 155, 90, 0.05);
+    }
+
+    .dropzone .icon { font-size: 18px; margin-bottom: 4px; }
+    .dropzone input[type="file"] { display: none; }
+
+    /* ── Status bar ── */
+    .statusbar {
+      height: 30px;
+      background: var(--bg-metal);
+      border-top: 1px solid var(--btn-light);
+      padding: 0 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .progress-bar {
+      height: 7px;
+      background: var(--panel-bg);
+      margin-bottom: 3px;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--retro-teal);
+      transition: width 0.3s;
+    }
+
+    .progress-fill.busy {
+      background: linear-gradient(90deg,
+        #e85050, #e8a030, #e0d030, #50c850, #4090e0, #9060c0,
+        #e85050, #e8a030, #e0d030, #50c850, #4090e0, #9060c0);
+      background-size: 200% 100%;
+      animation: rainbow 2s linear infinite;
+    }
+
+    @keyframes rainbow { to { background-position: -200% 0; } }
+
+    .status-text {
+      font-size: 10px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-text.error { color: var(--retro-rose); }
+
+    /* ── Download bar ── */
     .download-bar {
       display: none;
-      padding: 0.75rem 1.5rem;
-      border-top: 1px solid var(--border);
-      background: var(--surface);
+      padding: 4px 6px;
+      background: var(--bg-metal);
+      border-top: 1px solid var(--btn-shadow);
       align-items: center;
-      gap: 1rem;
+      gap: 8px;
     }
 
     .download-bar.visible { display: flex; }
 
     .download-bar .info {
       flex: 1;
-      font-size: 0.8rem;
+      font-size: 9px;
       color: var(--text-dim);
     }
 
-    .btn-download {
-      padding: 0.5rem 1.25rem;
-      border: 1px solid var(--accent);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--accent-hover);
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: background 0.15s;
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .actions-panel { display: none; }
+      .settings-panel { width: 220px; }
     }
 
-    .btn-download:hover {
-      background: rgba(99, 102, 241, 0.1);
-    }
-
-    /* Tonal collapse */
-    .collapse-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .collapse-header .arrow {
-      font-size: 0.7rem;
-      transition: transform 0.2s;
-      color: var(--text-dim);
-    }
-
-    .collapse-header .arrow.open { transform: rotate(90deg); }
-
-    .collapse-body {
-      display: none;
-      margin-top: 0.75rem;
-    }
-
-    .collapse-body.open { display: block; }
-
-    /* Loading spinner */
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-      vertical-align: middle;
-      margin-right: 0.5rem;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .app {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-      }
-      .sidebar {
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        max-height: 50vh;
-      }
+    @media (max-width: 600px) {
+      .app-layout { flex-direction: column; }
+      .settings-panel { width: 100%; max-height: 50vh; order: 1; border-left: none; border-bottom: 1px solid var(--btn-shadow); }
+      .central-panel { order: 2; }
+      .actions-panel { display: none; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Vectorize</h1>
-    <span>Raster to SVG — runs entirely in your browser via WebAssembly</span>
-  </header>
+  <!-- Title bar -->
+  <div class="titlebar">
+    <span class="titlebar-text">Vectorize</span>
+  </div>
 
-  <div class="app">
-    <aside class="sidebar">
-      <!-- Drop zone -->
-      <div class="dropzone" id="dropzone">
-        <div class="icon">+</div>
-        <p>Drop an image here or click to browse</p>
-        <p style="font-size:0.75rem; margin-top:0.25rem">PNG, JPEG, WebP, BMP, GIF</p>
-        <input type="file" id="fileInput" accept="image/*">
-      </div>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn-raised" id="btnOpen">OPEN</button>
+    <button class="btn-raised" id="btnExport" disabled>EXPORT</button>
+    <div class="toolbar-spacer"></div>
+    <button class="btn-toggle active" id="tabInput" data-tab="input">INPUT</button>
+    <button class="btn-toggle" id="tabOutput" data-tab="output">OUTPUT</button>
+  </div>
 
-      <!-- Mode selector -->
-      <div>
-        <div class="section-title">Mode</div>
-        <div class="mode-grid">
-          <button class="mode-btn active" data-mode="Logo">Logo</button>
-          <button class="mode-btn" data-mode="Illustration">Illustr.</button>
-          <button class="mode-btn" data-mode="Photo">Photo</button>
-          <button class="mode-btn" data-mode="HighFidelity">HiFi</button>
-          <button class="mode-btn" data-mode="Sketch">Sketch</button>
-        </div>
-      </div>
-
-      <!-- Quality sliders -->
-      <div>
-        <div class="section-title">Quality</div>
-        <div class="slider-group">
-          <div class="slider-row">
-            <label>Color Detail <span id="val-color_detail">40</span></label>
-            <input type="range" min="0" max="100" value="40" data-param="color_detail">
-          </div>
-          <div class="slider-row">
-            <label>Path Precision <span id="val-path_precision">100</span></label>
-            <input type="range" min="0" max="100" value="100" data-param="path_precision">
-          </div>
-          <div class="slider-row">
-            <label>Curve Smoothness <span id="val-curve_smoothness">25</span></label>
-            <input type="range" min="0" max="100" value="25" data-param="curve_smoothness">
-          </div>
-          <div class="slider-row">
-            <label>Noise Filter <span id="val-noise_filter">30</span></label>
-            <input type="range" min="0" max="100" value="30" data-param="noise_filter">
-          </div>
-          <div class="slider-row">
-            <label>Gradient Layers <span id="val-gradient_layers">15</span></label>
-            <input type="range" min="0" max="100" value="15" data-param="gradient_layers">
-          </div>
-        </div>
-      </div>
-
-      <!-- Tonal controls -->
-      <div>
-        <div class="collapse-header" id="tonalToggle">
-          <div class="section-title" style="margin-bottom:0">Tonal Detail</div>
-          <span class="arrow">&#9654;</span>
-        </div>
-        <div class="collapse-body" id="tonalBody">
-          <div class="slider-group">
-            <div class="slider-row">
-              <label>Shadow Detail <span id="val-shadow_detail">100</span></label>
-              <input type="range" min="0" max="100" value="100" data-param="shadow_detail">
-            </div>
-            <div class="slider-row">
-              <label>Midtone Detail <span id="val-midtone_detail">100</span></label>
-              <input type="range" min="0" max="100" value="100" data-param="midtone_detail">
-            </div>
-            <div class="slider-row">
-              <label>Highlight Detail <span id="val-highlight_detail">100</span></label>
-              <input type="range" min="0" max="100" value="100" data-param="highlight_detail">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Vectorize -->
-      <button class="btn-vectorize" id="btnVectorize" disabled>Vectorize</button>
-      <div class="status" id="status"></div>
-    </aside>
-
-    <div class="main">
-      <div class="preview-tabs">
-        <button class="preview-tab active" data-tab="input">Input</button>
-        <button class="preview-tab" data-tab="output">SVG Output</button>
-      </div>
-      <div class="preview-area" id="previewArea">
-        <div class="placeholder">Load an image to get started</div>
+  <div class="app-layout">
+    <!-- Central viewport -->
+    <div class="central-panel">
+      <div class="viewport" id="viewport">
+        <div class="placeholder">Drop or open an image</div>
       </div>
       <div class="download-bar" id="downloadBar">
         <div class="info" id="svgInfo"></div>
-        <button class="btn-download" id="btnDownload">Download SVG</button>
+        <button class="btn-raised" id="btnDownload">DOWNLOAD SVG</button>
       </div>
     </div>
+
+    <!-- Settings panel -->
+    <div class="settings-panel" id="settingsPanel">
+      <!-- Drop zone -->
+      <div class="dropzone" id="dropzone">
+        <div class="icon">+</div>
+        <p>Drop image or click to browse</p>
+        <p style="font-size:8px; margin-top:2px">PNG, JPEG, WebP, BMP, GIF</p>
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+
+      <!-- CONTROLS -->
+      <div class="section-header">CONTROLS</div>
+      <div class="inset">
+        <div class="slider-row green">
+          <span class="slider-label">Color Detail</span>
+          <input type="range" min="0" max="200" value="40" data-param="color_detail">
+          <span class="slider-value" id="val-color_detail">40</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Anchor Density</span>
+          <input type="range" min="0" max="100" value="50" data-param="anchor_density">
+          <span class="slider-value" id="val-anchor_density">50</span>
+        </div>
+        <div class="slider-row purple">
+          <span class="slider-label">Edge Smooth</span>
+          <input type="range" min="0" max="30" value="15" step="1" data-param="edge_smoothing">
+          <span class="slider-value" id="val-edge_smoothing">1.5</span>
+        </div>
+        <div class="slider-row" id="thresholdRow">
+          <span class="slider-label">Threshold</span>
+          <input type="range" min="0" max="100" value="20" data-param="color_threshold">
+          <span class="slider-value" id="val-color_threshold">20</span>
+        </div>
+      </div>
+
+      <!-- ADVANCED -->
+      <div class="collapse-header" id="advancedToggle">&#9654; ADVANCED</div>
+      <div class="collapse-body" id="advancedBody">
+        <div class="inset">
+          <div class="slider-row yellow">
+            <span class="slider-label">Path Precision</span>
+            <input type="range" min="0" max="200" value="100" data-param="path_precision">
+            <span class="slider-value" id="val-path_precision">100</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Curve Smooth</span>
+            <input type="range" min="0" max="200" value="25" data-param="curve_smoothness">
+            <span class="slider-value" id="val-curve_smoothness">25</span>
+          </div>
+          <div class="slider-row red">
+            <span class="slider-label">Noise Filter</span>
+            <input type="range" min="0" max="200" value="30" data-param="noise_filter">
+            <span class="slider-value" id="val-noise_filter">30</span>
+          </div>
+          <div class="slider-row purple">
+            <span class="slider-label">Gradient Layers</span>
+            <input type="range" min="0" max="200" value="15" data-param="gradient_layers">
+            <span class="slider-value" id="val-gradient_layers">15</span>
+          </div>
+
+          <div style="height:4px"></div>
+
+          <!-- Tonal -->
+          <div class="slider-row purple">
+            <span class="slider-label">Shadows</span>
+            <input type="range" min="0" max="100" value="100" data-param="shadow_detail">
+            <span class="slider-value" id="val-shadow_detail">100</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Midtones</span>
+            <input type="range" min="0" max="100" value="100" data-param="midtone_detail">
+            <span class="slider-value" id="val-midtone_detail">100</span>
+          </div>
+          <div class="slider-row yellow">
+            <span class="slider-label">Highlights</span>
+            <input type="range" min="0" max="100" value="100" data-param="highlight_detail">
+            <span class="slider-value" id="val-highlight_detail">100</span>
+          </div>
+
+          <div style="height:4px"></div>
+
+          <!-- Checkboxes -->
+          <div class="checkbox-row" data-check="extract_lines">
+            <div class="checkbox-box"></div> Extract Lines
+          </div>
+          <div class="checkbox-row" data-check="detect_shapes">
+            <div class="checkbox-box"></div> Detect Shapes
+          </div>
+          <div class="checkbox-row checked" data-check="merge_paths">
+            <div class="checkbox-box">&#10003;</div> Merge Paths
+          </div>
+          <div class="checkbox-row checked" data-check="flatten_background">
+            <div class="checkbox-box">&#10003;</div> Flatten Background
+          </div>
+          <div class="checkbox-row" data-check="snap_curves_to_lines">
+            <div class="checkbox-box"></div> Snap To Lines
+          </div>
+
+          <div style="height:4px"></div>
+
+          <!-- Layer mode -->
+          <div class="toggle-row">
+            <button class="btn-toggle active" data-layer="Stacked">Stacked</button>
+            <button class="btn-toggle" data-layer="Cutout">Cutout</button>
+          </div>
+
+          <!-- Simplify method -->
+          <div class="toggle-row">
+            <button class="btn-toggle active" data-simplify="bezier">Bezier</button>
+            <button class="btn-toggle" data-simplify="visvalingam">Visvalingam</button>
+          </div>
+
+          <div style="height:4px"></div>
+
+          <div class="slider-row blue">
+            <span class="slider-label">Min Area</span>
+            <input type="range" min="1" max="200" value="25" data-param="min_area">
+            <span class="slider-value" id="val-min_area">25</span>
+          </div>
+          <div class="slider-row green">
+            <span class="slider-label">Tones/Hue</span>
+            <input type="range" min="0" max="8" value="0" data-param="tones_per_hue">
+            <span class="slider-value" id="val-tones_per_hue">Off</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOG -->
+      <div class="section-header">LOG</div>
+      <div class="log-box" id="logBox"></div>
+
+      <!-- VECTORIZE -->
+      <button class="btn-vectorize" id="btnVectorize" disabled>VECTORIZE</button>
+    </div>
+
+    <!-- Actions panel -->
+    <div class="actions-panel">
+      <div class="section-header">MODE</div>
+      <button class="btn-toggle active" data-mode="Logo">Logo</button>
+      <button class="btn-toggle" data-mode="Illustration">Illust</button>
+      <button class="btn-toggle" data-mode="Photo">Photo</button>
+      <button class="btn-toggle" data-mode="HighFidelity">HiFi</button>
+      <button class="btn-toggle" data-mode="Sketch">Sketch</button>
+
+      <div style="height:6px"></div>
+      <div class="section-header">ENGINE</div>
+      <button class="btn-toggle active" data-engine="Vtracer">VTracer</button>
+      <button class="btn-toggle" data-engine="Hybrid">Hybrid</button>
+      <button class="btn-toggle" data-engine="Native">Native</button>
+
+      <div style="height:6px"></div>
+      <div class="section-header">ACTIONS</div>
+      <button class="btn-raised" id="btnCancel" disabled>CANCEL</button>
+      <button class="btn-raised" id="btnClear">CLEAR</button>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="statusbar">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="status-text" id="statusText">Ready</div>
   </div>
 
   <script type="module" src="app.js"></script>

@@ -3,56 +3,79 @@
 let wasm = null;
 
 async function loadWasm() {
-  const status = document.getElementById("status");
-  status.textContent = "Loading WASM engine...";
-  status.className = "status";
-
+  logMsg("Loading WASM engine...");
   try {
     const mod = await import("./pkg/vectorize_wasm.js");
-    await mod.default(); // init wasm
+    await mod.default();
     wasm = mod;
-    status.textContent = "Engine ready.";
-    status.className = "status success";
-    setTimeout(() => { status.textContent = ""; }, 2000);
+    logMsg("Engine ready.");
+    setStatus("Engine ready.");
   } catch (e) {
-    status.textContent = "Failed to load WASM: " + e.message;
-    status.className = "status error";
+    logMsg("Failed to load WASM: " + e.message);
+    setStatus("Failed to load WASM: " + e.message, true);
     console.error("WASM load error:", e);
   }
 }
 
 loadWasm();
 
-// ── Mode presets (must match Rust quality.rs defaults) ──
+// ── Mode presets (must match Rust quality.rs) ──
 
 const MODE_DEFAULTS = {
-  Logo:         { color_detail: 40, path_precision: 100, curve_smoothness: 25, noise_filter: 30, gradient_layers: 15 },
-  Illustration: { color_detail: 50, path_precision: 60,  curve_smoothness: 35, noise_filter: 50, gradient_layers: 30 },
-  Photo:        { color_detail: 80, path_precision: 55,  curve_smoothness: 60, noise_filter: 60, gradient_layers: 60 },
-  HighFidelity: { color_detail: 95, path_precision: 85,  curve_smoothness: 20, noise_filter: 20, gradient_layers: 85 },
-  Sketch:       { color_detail: 25, path_precision: 70,  curve_smoothness: 15, noise_filter: 60, gradient_layers: 10 },
+  Logo:         { color_detail: 40, path_precision: 100, curve_smoothness: 25, noise_filter: 30, gradient_layers: 15, anchor_density: 50, edge_smoothing: 15, color_threshold: 20 },
+  Illustration: { color_detail: 50, path_precision: 60,  curve_smoothness: 35, noise_filter: 50, gradient_layers: 30, anchor_density: 50, edge_smoothing: 15, color_threshold: 20 },
+  Photo:        { color_detail: 80, path_precision: 55,  curve_smoothness: 60, noise_filter: 60, gradient_layers: 60, anchor_density: 50, edge_smoothing: 15, color_threshold: 20 },
+  HighFidelity: { color_detail: 95, path_precision: 85,  curve_smoothness: 20, noise_filter: 20, gradient_layers: 85, anchor_density: 50, edge_smoothing: 15, color_threshold: 20 },
+  Sketch:       { color_detail: 25, path_precision: 70,  curve_smoothness: 15, noise_filter: 60, gradient_layers: 10, anchor_density: 50, edge_smoothing: 15, color_threshold: 20 },
 };
 
 // ── State ──
 
-let imageBytes = null;   // Uint8Array of the loaded file
-let imageDataUrl = null;  // for preview
-let svgString = null;     // result
+let imageBytes = null;
+let imageDataUrl = null;
+let svgString = null;
 let currentMode = "Logo";
+let currentEngine = "Vtracer";
 let currentTab = "input";
+let busy = false;
 
 // ── DOM refs ──
 
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("fileInput");
+const btnOpen = document.getElementById("btnOpen");
+const btnExport = document.getElementById("btnExport");
 const btnVectorize = document.getElementById("btnVectorize");
 const btnDownload = document.getElementById("btnDownload");
-const statusEl = document.getElementById("status");
-const previewArea = document.getElementById("previewArea");
+const btnCancel = document.getElementById("btnCancel");
+const btnClear = document.getElementById("btnClear");
+const viewport = document.getElementById("viewport");
 const downloadBar = document.getElementById("downloadBar");
 const svgInfo = document.getElementById("svgInfo");
-const tonalToggle = document.getElementById("tonalToggle");
-const tonalBody = document.getElementById("tonalBody");
+const logBox = document.getElementById("logBox");
+const statusText = document.getElementById("statusText");
+const progressFill = document.getElementById("progressFill");
+const advancedToggle = document.getElementById("advancedToggle");
+const advancedBody = document.getElementById("advancedBody");
+
+// ── Logging ──
+
+function logMsg(msg) {
+  const p = document.createElement("p");
+  p.textContent = msg;
+  logBox.appendChild(p);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setStatus(msg, isError) {
+  statusText.textContent = msg;
+  statusText.className = "status-text" + (isError ? " error" : "");
+}
+
+function setProgress(pct, isBusy) {
+  progressFill.style.width = pct + "%";
+  progressFill.className = "progress-fill" + (isBusy ? " busy" : "");
+}
 
 // ── File loading ──
 
@@ -62,8 +85,6 @@ function handleFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     imageBytes = new Uint8Array(e.target.result);
-
-    // Also create data URL for preview
     const blob = new Blob([imageBytes], { type: file.type });
     imageDataUrl = URL.createObjectURL(blob);
 
@@ -71,25 +92,22 @@ function handleFile(file) {
     svgString = null;
     downloadBar.classList.remove("visible");
 
-    // Switch to input tab and show preview
     switchTab("input");
     showInputPreview();
 
-    statusEl.textContent = `Loaded: ${file.name} (${formatBytes(file.size)})`;
-    statusEl.className = "status";
+    logMsg(`Loaded: ${file.name} (${formatBytes(file.size)})`);
+    setStatus(`${file.name} | Ready`);
   };
   reader.readAsArrayBuffer(file);
 }
 
+btnOpen.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", (e) => {
   if (e.target.files.length) handleFile(e.target.files[0]);
 });
 
-dropzone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropzone.classList.add("dragover");
-});
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
 dropzone.addEventListener("drop", (e) => {
   e.preventDefault();
@@ -99,9 +117,9 @@ dropzone.addEventListener("drop", (e) => {
 
 // ── Mode selector ──
 
-document.querySelectorAll(".mode-btn").forEach((btn) => {
+document.querySelectorAll("[data-mode]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll("[data-mode]").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentMode = btn.dataset.mode;
     applyModeDefaults(currentMode);
@@ -116,89 +134,142 @@ function applyModeDefaults(mode) {
     const slider = document.querySelector(`input[data-param="${key}"]`);
     if (slider) {
       slider.value = value;
-      const valSpan = document.getElementById(`val-${key}`);
-      if (valSpan) valSpan.textContent = value;
+      updateSliderDisplay(slider);
     }
+  }
+
+  // Logo mode: enable threshold, disable color detail
+  const isLogo = mode === "Logo";
+  const thresholdRow = document.getElementById("thresholdRow");
+  if (thresholdRow) {
+    thresholdRow.classList.toggle("disabled", !isLogo);
   }
 }
 
-// ── Sliders ──
+// ── Engine selector ──
 
-document.querySelectorAll("input[type='range']").forEach((slider) => {
-  slider.addEventListener("input", () => {
-    const valSpan = document.getElementById(`val-${slider.dataset.param}`);
-    if (valSpan) valSpan.textContent = slider.value;
+document.querySelectorAll("[data-engine]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-engine]").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentEngine = btn.dataset.engine;
   });
 });
 
-// ── Tonal collapse ──
+// ── Layer mode ──
 
-tonalToggle.addEventListener("click", () => {
-  const arrow = tonalToggle.querySelector(".arrow");
-  arrow.classList.toggle("open");
-  tonalBody.classList.toggle("open");
+document.querySelectorAll("[data-layer]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-layer]").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+});
+
+// ── Simplify method ──
+
+document.querySelectorAll("[data-simplify]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-simplify]").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+});
+
+// ── Sliders ──
+
+function updateSliderDisplay(slider) {
+  const param = slider.dataset.param;
+  const valSpan = document.getElementById(`val-${param}`);
+  if (!valSpan) return;
+
+  if (param === "edge_smoothing") {
+    valSpan.textContent = (parseFloat(slider.value) / 10).toFixed(1);
+  } else if (param === "tones_per_hue") {
+    valSpan.textContent = slider.value === "0" ? "Off" : slider.value;
+  } else {
+    valSpan.textContent = slider.value;
+  }
+}
+
+document.querySelectorAll("input[type='range']").forEach((slider) => {
+  slider.addEventListener("input", () => updateSliderDisplay(slider));
+});
+
+// ── Checkboxes ──
+
+document.querySelectorAll(".checkbox-row").forEach((row) => {
+  row.addEventListener("click", () => {
+    row.classList.toggle("checked");
+    const box = row.querySelector(".checkbox-box");
+    box.textContent = row.classList.contains("checked") ? "\u2713" : "";
+  });
+});
+
+// ── Advanced collapse ──
+
+advancedToggle.addEventListener("click", () => {
+  const isOpen = advancedBody.classList.toggle("open");
+  advancedToggle.textContent = (isOpen ? "\u25BC" : "\u25B6") + " ADVANCED";
 });
 
 // ── Tabs ──
 
-document.querySelectorAll(".preview-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    switchTab(tab.dataset.tab);
-  });
-});
+document.getElementById("tabInput").addEventListener("click", () => switchTab("input"));
+document.getElementById("tabOutput").addEventListener("click", () => switchTab("output"));
 
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll(".preview-tab").forEach((t) => {
+  document.querySelectorAll("[data-tab]").forEach((t) => {
     t.classList.toggle("active", t.dataset.tab === tab);
   });
-
-  if (tab === "input") {
-    showInputPreview();
-  } else {
-    showOutputPreview();
-  }
+  if (tab === "input") showInputPreview();
+  else showOutputPreview();
 }
 
 function showInputPreview() {
   if (!imageDataUrl) {
-    previewArea.innerHTML = '<div class="placeholder">Load an image to get started</div>';
+    viewport.innerHTML = '<div class="placeholder">Drop or open an image</div>';
     return;
   }
-  previewArea.innerHTML = `<img src="${imageDataUrl}" alt="Input image">`;
+  viewport.innerHTML = `<img src="${imageDataUrl}" alt="Input image">`;
 }
 
 function showOutputPreview() {
   if (!svgString) {
-    previewArea.innerHTML = '<div class="placeholder">Click "Vectorize" to generate SVG</div>';
+    viewport.innerHTML = '<div class="placeholder">Click VECTORIZE to generate SVG</div>';
     return;
   }
-  previewArea.innerHTML = `<div class="svg-container">${svgString}</div>`;
+  viewport.innerHTML = `<div class="svg-container">${svgString}</div>`;
 }
 
-// ── Vectorize ──
+// ── Build config ──
 
 function buildConfig() {
   const quality = {};
   document.querySelectorAll("input[data-param]").forEach((slider) => {
-    quality[slider.dataset.param] = parseFloat(slider.value);
+    const param = slider.dataset.param;
+    let val = parseFloat(slider.value);
+    // edge_smoothing is stored as x10 int in the slider
+    if (param === "edge_smoothing") val = val / 10;
+    quality[param] = val;
   });
 
-  return {
-    mode: currentMode,
-    quality,
-  };
+  return { mode: currentMode, quality };
 }
 
+// ── Vectorize ──
+
 btnVectorize.addEventListener("click", async () => {
-  if (!imageBytes || !wasm) return;
+  if (!imageBytes || !wasm || busy) return;
 
+  busy = true;
   btnVectorize.disabled = true;
-  statusEl.innerHTML = '<span class="spinner"></span>Vectorizing...';
-  statusEl.className = "status";
+  btnCancel.disabled = false;
   downloadBar.classList.remove("visible");
+  setProgress(50, true);
+  logMsg("Starting vectorization...");
+  logMsg(`  Engine: ${currentEngine}  Mode: ${currentMode}`);
+  setStatus(`Vectorizing... | ${currentMode}`);
 
-  // Use setTimeout to let the UI update before blocking
   await new Promise((r) => setTimeout(r, 50));
 
   try {
@@ -208,25 +279,54 @@ btnVectorize.addEventListener("click", async () => {
     const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
 
     const svgSize = new Blob([svgString]).size;
-    statusEl.textContent = `Done in ${elapsed}s`;
-    statusEl.className = "status success";
+    const paths = (svgString.match(/<path/g) || []).length;
 
-    svgInfo.textContent = `SVG size: ${formatBytes(svgSize)}`;
+    logMsg(`  SVG generated: ${formatBytes(svgSize)} | ${paths} paths`);
+    logMsg(`  Done in ${elapsed}s`);
+    setStatus(`Done in ${elapsed}s | P:${paths} | ${formatBytes(svgSize)}`);
+    setProgress(100, false);
+
+    svgInfo.textContent = `${formatBytes(svgSize)} | ${paths} paths`;
     downloadBar.classList.add("visible");
+    btnExport.disabled = false;
 
     switchTab("output");
   } catch (e) {
-    statusEl.textContent = "Error: " + e.message;
-    statusEl.className = "status error";
+    logMsg("ERROR: " + e.message);
+    setStatus("Error: " + e.message, true);
+    setProgress(0, false);
     console.error("Vectorize error:", e);
   } finally {
-    btnVectorize.disabled = false;
+    busy = false;
+    btnVectorize.disabled = !imageBytes;
+    btnCancel.disabled = true;
   }
 });
 
-// ── Download ──
+// ── Clear ──
 
-btnDownload.addEventListener("click", () => {
+btnClear.addEventListener("click", () => {
+  imageBytes = null;
+  imageDataUrl = null;
+  svgString = null;
+  btnVectorize.disabled = true;
+  btnExport.disabled = true;
+  downloadBar.classList.remove("visible");
+  viewport.innerHTML = '<div class="placeholder">Drop or open an image</div>';
+  logBox.innerHTML = "";
+  setStatus("Ready");
+  setProgress(0, false);
+
+  // Reset mode to Logo
+  document.querySelectorAll("[data-mode]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('[data-mode="Logo"]').classList.add("active");
+  currentMode = "Logo";
+  applyModeDefaults("Logo");
+});
+
+// ── Download / Export ──
+
+function downloadSvg() {
   if (!svgString) return;
   const blob = new Blob([svgString], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
@@ -235,7 +335,10 @@ btnDownload.addEventListener("click", () => {
   a.download = "vectorized.svg";
   a.click();
   URL.revokeObjectURL(url);
-});
+}
+
+btnDownload.addEventListener("click", downloadSvg);
+btnExport.addEventListener("click", downloadSvg);
 
 // ── Utilities ──
 
