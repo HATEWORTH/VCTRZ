@@ -1238,7 +1238,6 @@ impl eframe::App for VectorizeApp {
 
                     let is_logo = self.preset_idx == 0; // Logo mode
                     let is_sketch = self.preset_idx == 4; // Sketch mode
-                    let not_logo = !is_logo;
 
                     // ── MAIN CONTROLS (always visible) ────────────
                     section_header(ui, "CONTROLS");
@@ -1254,7 +1253,7 @@ impl eframe::App for VectorizeApp {
                              200 = ~512 colors. Maximum fidelity.\n\
                              \n\
                              Higher = more detail + larger file size.\n\
-                             Lower = fewer shapes + smaller file + graphic look.", c_green, not_logo);
+                             Lower = fewer shapes + smaller file + graphic look.", c_green, true);
                         labeled_slider_color(ui, "Anchor Density", &mut self.anchor_density, 0.0, 100.0,
                             "How many anchor points along curved paths.\n\
                              More anchors = smoother curves, larger SVG.\n\
@@ -1305,33 +1304,33 @@ impl eframe::App for VectorizeApp {
                              \n\
                              0 = Loose/simplified. Fewer segments, smaller file.\n\
                              50 = Balanced. Good general purpose.\n\
-                             100 = Pixel-perfect tracing. Largest file size.", c_yellow, not_logo);
+                             100 = Pixel-perfect tracing. Largest file size.", c_yellow, true);
                         labeled_slider_color_enabled(ui, "Curve Smooth", &mut self.curve_smoothness, 0.0, 200.0,
                             "How smooth output curves are.\n\
                              \n\
                              0 = Angular/sharp. Preserves all corners.\n\
                              30 = Mild smoothing. Removes pixel stairs.\n\
                              50 = Moderate. Good for organic shapes.\n\
-                             80+ = Ultra smooth. Flowing curves, loses fine detail.", c_orange, not_logo);
+                             80+ = Ultra smooth. Flowing curves, loses fine detail.", c_orange, true);
                         labeled_slider_color_enabled(ui, "Noise Filter", &mut self.noise_filter, 0.0, 200.0,
                             "How aggressively small artifacts are removed.\n\
                              \n\
                              0 = Keep everything, even 1px dots.\n\
                              30 = Light cleanup. Removes dust/noise.\n\
                              70 = Moderate. Removes small features.\n\
-                             100 = Aggressive. Only large shapes survive.", c_red, not_logo);
+                             100 = Aggressive. Only large shapes survive.", c_red, true);
                         labeled_slider_color_enabled(ui, "Gradient Layers", &mut self.gradient_layers, 0.0, 200.0,
                             "How many gradient steps between similar colors.\n\
                              \n\
                              0 = Merge all similar tones. Flat/posterized.\n\
                              50 = Moderate gradient resolution.\n\
                              100 = Fine gradients. Most distinct layers.\n\
-                             100+ = Combined with Color Detail for maximum fidelity.", c_purple, not_logo);
+                             100+ = Combined with Color Detail for maximum fidelity.", c_purple, true);
                         ui.add_space(4.0);
 
                         // Tonal detail
                         {
-                            let tonal_enabled = not_logo && !is_sketch;
+                            let tonal_enabled = !is_sketch;
                             labeled_slider_color_enabled(ui, "Shadows", &mut self.shadow_detail, 0.0, 100.0,
                                 "Detail in dark regions (blacks, deep shadows).\n\
                                  \n\
@@ -1358,12 +1357,12 @@ impl eframe::App for VectorizeApp {
                             "Separate thin features (text, outlines) into a high-precision\n\
                              binary layer. Best for images with text overlaid on color art.\n\
                              ON = sharper text and outlines, two-pass (slightly slower).\n\
-                             OFF = single-pass vectorization.", not_logo);
+                             OFF = single-pass vectorization.", true);
                         metal_checkbox_tip_enabled(ui, &mut self.detect_shapes, "Detect Shapes",
                             "Replace paths with clean SVG primitives (circles, rectangles)\n\
                              when a shape closely matches a geometric form.\n\
                              Produces smaller files with crisper geometry.\n\
-                             (Logo mode always detects shapes)", not_logo);
+                             (Logo mode always detects shapes)", true);
                         metal_checkbox_tip(ui, &mut self.merge_paths, "Merge Paths",
                             "Combine same-color paths into single elements.\n\
                              ON = fewer elements, smaller file, unified shapes.\n\
