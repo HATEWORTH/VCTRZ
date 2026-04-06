@@ -574,16 +574,20 @@ fn filter_svg_output_types(svg: &str, create_fills: bool, create_strokes: bool) 
 fn vectorize_engine(image: &DynamicImage, config: &VectorizeConfig) -> Result<String> {
     tracing::info!("Mode: {:?} | Engine: {:?}", config.mode, config.engine);
 
-    // Logo mode: always use the logo-specific pipeline
-    if config.mode == quality::Mode::Logo {
-        return backend::logo::vectorize_logo(image, config);
-    }
+    // For Logo mode, apply logo-tuned config but still use the selected engine
+    let effective_config;
+    let cfg = if config.mode == quality::Mode::Logo {
+        effective_config = backend::logo::logo_adjusted_config(config);
+        &effective_config
+    } else {
+        config
+    };
 
-    match config.engine {
+    let svg = match cfg.engine {
         Engine::Vtracer => {
             let t0 = crate::par::instant_now();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                backend::vtracer_backend::vectorize_with_vtracer(image, config)
+                backend::vtracer_backend::vectorize_with_vtracer(image, cfg)
             }));
             tracing::info!("VTracer engine completed in {:?}", t0.elapsed());
             match result {
@@ -595,11 +599,18 @@ fn vectorize_engine(image: &DynamicImage, config: &VectorizeConfig) -> Result<St
         }
         Engine::Hybrid => {
             let t0 = crate::par::instant_now();
-            let result = backend::hybrid::vectorize_hybrid(image, config);
+            let result = backend::hybrid::vectorize_hybrid(image, cfg);
             tracing::info!("Hybrid engine completed in {:?}", t0.elapsed());
             result
         }
-        Engine::Native => vectorize_native(image, config),
+        Engine::Native => vectorize_native(image, cfg),
+    }?;
+
+    // Logo mode: apply logo-specific post-processing (line snapping, corner sharpening, shape detection)
+    if config.mode == quality::Mode::Logo {
+        Ok(backend::logo::logo_post_process_svg(&svg, config))
+    } else {
+        Ok(svg)
     }
 }
 
@@ -630,27 +641,37 @@ pub fn vectorize_with_progress(
         config.engine,
     );
 
-    // Logo mode: always use the logo-specific pipeline
-    if config.mode == quality::Mode::Logo {
-        let svg = backend::logo::vectorize_logo_with_progress(image, config, state)?;
-        return Ok(post_process_svg(&svg, config));
-    }
+    // For Logo mode, apply logo-tuned config but still use the selected engine
+    let effective_config;
+    let cfg = if config.mode == quality::Mode::Logo {
+        effective_config = backend::logo::logo_adjusted_config(config);
+        &effective_config
+    } else {
+        config
+    };
 
-    let svg = match config.engine {
+    let svg = match cfg.engine {
         Engine::Vtracer => {
             let t0 = crate::par::instant_now();
-            let result = backend::vtracer_backend::vectorize_with_vtracer(image, config);
+            let result = backend::vtracer_backend::vectorize_with_vtracer(image, cfg);
             tracing::info!("VTracer engine completed in {:?}", t0.elapsed());
             result
         }
         Engine::Hybrid => {
             let t0 = crate::par::instant_now();
-            let result = backend::hybrid::vectorize_hybrid_with_progress(image, config, state);
+            let result = backend::hybrid::vectorize_hybrid_with_progress(image, cfg, state);
             tracing::info!("Hybrid engine completed in {:?}", t0.elapsed());
             result
         }
-        Engine::Native => vectorize_native(image, config),
+        Engine::Native => vectorize_native(image, cfg),
     }?;
+
+    // Logo mode: apply logo-specific post-processing
+    let svg = if config.mode == quality::Mode::Logo {
+        backend::logo::logo_post_process_svg(&svg, config)
+    } else {
+        svg
+    };
 
     Ok(post_process_svg(&svg, config))
 }

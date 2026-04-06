@@ -26,14 +26,20 @@ use crate::{Color, Result, VectorizeConfig};
 /// - Curve resolution driven by anchor_density slider
 /// - Sharp corner detection (keep hard angles crisp)
 /// - Spline mode (real bezier curves, not polygons)
+/// Build a config adjusted for Logo mode — ensures spline mode is active.
+/// Used by the main vectorize pipeline so any engine can be used with Logo.
+pub fn logo_adjusted_config(config: &VectorizeConfig) -> VectorizeConfig {
+    logo_vtracer_config(config)
+}
+
 fn logo_vtracer_config(config: &VectorizeConfig) -> VectorizeConfig {
     let mut logo_config = config.clone();
 
-    // Force spline mode — logos need real bezier curves, not polygons.
-    // Set curve_smoothness high enough to trigger Spline mode and
-    // reasonable Chaikin smoothing, but anchor_density controls the
-    // actual point count via build_vtracer_config().
-    logo_config.quality.curve_smoothness = 60.0;
+    // Ensure spline mode — logos need real bezier curves, not polygons.
+    // Only override if the user's curve_smoothness is too low for spline mode.
+    if logo_config.quality.curve_smoothness < 1.0 {
+        logo_config.quality.curve_smoothness = 1.0;
+    }
 
     logo_config
 }
@@ -69,6 +75,14 @@ pub fn vectorize_logo_with_progress(
 
     tracing::info!("Logo pipeline completed in {:?}", t0.elapsed());
     Ok(svg)
+}
+
+/// Apply logo-specific post-processing to an SVG string.
+/// Parses each <path>, transforms it, and rebuilds the SVG.
+/// Apply logo-specific post-processing to any SVG string.
+/// Public so the main pipeline can apply it after any engine.
+pub fn logo_post_process_svg(svg: &str, config: &VectorizeConfig) -> String {
+    logo_post_process(svg, config)
 }
 
 /// Apply logo-specific post-processing to an SVG string.
