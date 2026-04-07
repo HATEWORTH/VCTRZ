@@ -256,6 +256,7 @@ impl ModeRecipe {
             snap_curves_to_lines: false,
             create_fills: true,
             create_strokes: false,
+            max_dimension: 0,
             mode: Mode::Illustration, // will be set by caller
         }
     }

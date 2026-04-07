@@ -144,6 +144,8 @@ struct SavedSettings {
     simplify_method_idx: usize,
     tones_per_hue: u8,
     min_area: u32,
+    #[serde(default)]
+    max_dimension: u32,
     edge_smoothing: f32,
     color_threshold: f32,
     anchor_density: f32,
@@ -215,6 +217,7 @@ struct VectorizeApp {
     tones_per_hue: u8,
     color_count: u32,
     min_area: u32,
+    max_dimension: u32,
     edge_smoothing: f32,
     color_threshold: f32,
     anchor_density: f32,
@@ -282,6 +285,7 @@ impl Default for VectorizeApp {
             tones_per_hue: recipe.tones_per_hue,
             color_count: 0,
             min_area: recipe.min_area,
+            max_dimension: 0,
             edge_smoothing: recipe.edge_smoothing as f32,
             color_threshold: recipe.color_threshold as f32,
             anchor_density: recipe.anchor_density as f32,
@@ -351,6 +355,7 @@ impl VectorizeApp {
             simplify_method_idx: self.simplify_method_idx,
             tones_per_hue: self.tones_per_hue,
             min_area: self.min_area,
+            max_dimension: self.max_dimension,
             edge_smoothing: self.edge_smoothing,
             color_threshold: self.color_threshold,
             anchor_density: self.anchor_density,
@@ -380,6 +385,7 @@ impl VectorizeApp {
         self.simplify_method_idx = s.simplify_method_idx.min(1);
         self.tones_per_hue = s.tones_per_hue;
         self.min_area = s.min_area;
+        self.max_dimension = s.max_dimension;
         self.edge_smoothing = s.edge_smoothing;
         self.color_threshold = s.color_threshold;
         self.anchor_density = s.anchor_density;
@@ -517,6 +523,7 @@ impl VectorizeApp {
             snap_curves_to_lines: self.snap_curves_to_lines,
             create_fills: self.create_fills,
             create_strokes: self.create_strokes,
+            max_dimension: self.max_dimension,
             quality,
             mode: MODE_VALUES[self.preset_idx],
             ..Default::default()
@@ -1406,6 +1413,15 @@ impl eframe::App for VectorizeApp {
                         }
                         ui.add_space(4.0);
 
+                        int_slider_color(ui, "Max Dim", &mut self.max_dimension, 0, 4000, "Off",
+                            "Maximum image dimension for processing.\n\
+                             Images larger than this are downscaled before vectorizing.\n\
+                             SVG output is scaled back to original size.\n\
+                             \n\
+                             Off = Process at original resolution.\n\
+                             1000 = Good balance of speed and detail.\n\
+                             1500 = Higher detail, slower.\n\
+                             2000 = Maximum detail for large files.", c_purple);
                         int_slider_color(ui, "Min Area", &mut self.min_area, 1, 200, "",
                             "Minimum region size in pixels to keep.\n\
                              Smaller regions are discarded as noise.\n\

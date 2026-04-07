@@ -219,6 +219,13 @@ pub struct VectorizeConfig {
     /// parameter ranges. Unlike quality sliders (which tune intensity),
     /// the mode determines *which* techniques are used at each stage.
     pub mode: quality::Mode,
+
+    /// Maximum dimension (width or height) for processing.
+    /// Images larger than this are downscaled before vectorization, then
+    /// the SVG viewBox is set to the original size. Since SVG is resolution-
+    /// independent, the output looks identical but processes much faster.
+    /// 0 = no limit (process at original size).
+    pub max_dimension: u32,
 }
 
 /// Tracing engine selection.
@@ -275,6 +282,7 @@ impl Default for VectorizeConfig {
             create_fills: true,
             create_strokes: false,
             mode: quality::Mode::default(),
+            max_dimension: 0,
         }
     }
 }
@@ -317,17 +325,121 @@ impl Default for ProgressState {
     }
 }
 
+/// Downscale image if it exceeds max_dimension. Returns (image, was_downscaled).
+/// Uses Lanczos3 filtering for high-quality downscaling.
+fn maybe_downscale(image: &DynamicImage, max_dim: u32) -> (DynamicImage, bool) {
+    if max_dim == 0 {
+        return (image.clone(), false);
+    }
+
+    let w = image.width();
+    let h = image.height();
+    let max_side = w.max(h);
+
+    if max_side <= max_dim {
+        return (image.clone(), false);
+    }
+
+    let scale = max_dim as f64 / max_side as f64;
+    let new_w = (w as f64 * scale).round() as u32;
+    let new_h = (h as f64 * scale).round() as u32;
+
+    let resized = image.resize_exact(
+        new_w.max(1),
+        new_h.max(1),
+        image::imageops::FilterType::Lanczos3,
+    );
+    (resized, true)
+}
+
+/// Update SVG width/height/viewBox to the original (pre-downscale) dimensions.
+/// The paths stay in the downscaled coordinate system, but the viewBox maps
+/// them to the original size, so the SVG renders at the correct resolution.
+fn rescale_svg_viewbox(svg: &str, orig_width: u32, orig_height: u32) -> String {
+    // Find the <svg tag and replace width/height attributes
+    if let Some(svg_start) = svg.find("<svg") {
+        if let Some(close) = svg[svg_start..].find('>') {
+            let tag_end = svg_start + close;
+            let tag = &svg[svg_start..=tag_end];
+
+            // Build new tag with original dimensions and a viewBox
+            // that maps from the downscaled coordinate space
+            let mut new_tag = tag.to_string();
+
+            // Replace or add width
+            if let Some(w_start) = new_tag.find("width=\"") {
+                let w_val_start = w_start + 7;
+                if let Some(w_end) = new_tag[w_val_start..].find('"') {
+                    let old_w = &new_tag[w_val_start..w_val_start + w_end];
+                    // Keep the downscaled viewBox width for coordinate mapping
+                    let viewbox_w = old_w.to_string();
+                    new_tag = new_tag.replacen(
+                        &format!("width=\"{}\"", old_w),
+                        &format!("width=\"{}\"", orig_width),
+                        1,
+                    );
+
+                    // Do the same for height
+                    if let Some(h_start) = new_tag.find("height=\"") {
+                        let h_val_start = h_start + 8;
+                        if let Some(h_end) = new_tag[h_val_start..].find('"') {
+                            let old_h = &new_tag[h_val_start..h_val_start + h_end].to_string();
+
+                            // Add viewBox if not present
+                            if !new_tag.contains("viewBox") {
+                                let viewbox = format!(
+                                    " viewBox=\"0 0 {} {}\"",
+                                    viewbox_w, old_h
+                                );
+                                // Insert before the closing >
+                                let insert_pos = new_tag.len() - 1;
+                                new_tag.insert_str(insert_pos, &viewbox);
+                            }
+
+                            new_tag = new_tag.replacen(
+                                &format!("height=\"{}\"", old_h),
+                                &format!("height=\"{}\"", orig_height),
+                                1,
+                            );
+                        }
+                    }
+                }
+            }
+
+            let mut result = String::with_capacity(svg.len() + 100);
+            result.push_str(&svg[..svg_start]);
+            result.push_str(&new_tag);
+            result.push_str(&svg[tag_end + 1..]);
+            return result;
+        }
+    }
+    svg.to_string()
+}
+
 /// Vectorize a raster image to SVG string.
 ///
 /// This is the main entry point. Dispatches to the selected engine.
 /// Default engine is VTracer (best quality). Use `Engine::Native` for
 /// our own pipeline when you need features vtracer doesn't support.
 pub fn vectorize(image: &DynamicImage, config: &VectorizeConfig) -> Result<String> {
+    let orig_width = image.width();
+    let orig_height = image.height();
+
+    if orig_width == 0 || orig_height == 0 {
+        return Err(VectorizeError::EmptyImage);
+    }
+
+    // Downscale if needed — SVG is resolution-independent so the output
+    // looks identical, but processing is much faster.
+    let (image, downscaled) = maybe_downscale(image, config.max_dimension);
     let width = image.width();
     let height = image.height();
 
-    if width == 0 || height == 0 {
-        return Err(VectorizeError::EmptyImage);
+    if downscaled {
+        tracing::info!(
+            "Downscaled {}x{} → {}x{} (max_dimension={})",
+            orig_width, orig_height, width, height, config.max_dimension
+        );
     }
 
     tracing::info!(
@@ -358,7 +470,7 @@ pub fn vectorize(image: &DynamicImage, config: &VectorizeConfig) -> Result<Strin
             // Vectorize full original image with normal settings (color layer)
             let mut color_config = config.clone();
             color_config.extract_lines = false; // Prevent recursion
-            let color_svg = vectorize_engine(image, &color_config)?;
+            let color_svg = vectorize_engine(&image, &color_config)?;
 
             // Vectorize line layer with max-precision settings
             let line_config = VectorizeConfig {
@@ -383,15 +495,24 @@ pub fn vectorize(image: &DynamicImage, config: &VectorizeConfig) -> Result<Strin
             );
 
             tracing::info!("Line extraction + dual-pass completed in {:?}", t0.elapsed());
-            return Ok(post_process_svg(&merged, config));
+            let mut svg = post_process_svg(&merged, config);
+            if downscaled {
+                svg = rescale_svg_viewbox(&svg, orig_width, orig_height);
+            }
+            return Ok(svg);
         }
         // No lines detected — fall through to normal vectorization
     }
 
-    let svg = vectorize_engine(image, config)?;
+    let svg = vectorize_engine(&image, config)?;
 
     // Post-processing: apply snap-to-lines and fills/strokes filtering
-    let svg = post_process_svg(&svg, config);
+    let mut svg = post_process_svg(&svg, config);
+
+    // If downscaled, update SVG dimensions to original size
+    if downscaled {
+        svg = rescale_svg_viewbox(&svg, orig_width, orig_height);
+    }
 
     Ok(svg)
 }
@@ -622,11 +743,22 @@ pub fn vectorize_with_progress(
     config: &VectorizeConfig,
     state: &ProgressState,
 ) -> Result<String> {
+    let orig_width = image.width();
+    let orig_height = image.height();
+
+    if orig_width == 0 || orig_height == 0 {
+        return Err(VectorizeError::EmptyImage);
+    }
+
+    let (image, downscaled) = maybe_downscale(image, config.max_dimension);
     let width = image.width();
     let height = image.height();
 
-    if width == 0 || height == 0 {
-        return Err(VectorizeError::EmptyImage);
+    if downscaled {
+        tracing::info!(
+            "Downscaled {}x{} → {}x{} (max_dimension={})",
+            orig_width, orig_height, width, height, config.max_dimension
+        );
     }
 
     tracing::info!(
@@ -653,17 +785,17 @@ pub fn vectorize_with_progress(
     let svg = match cfg.engine {
         Engine::Vtracer => {
             let t0 = crate::par::instant_now();
-            let result = backend::vtracer_backend::vectorize_with_vtracer(image, cfg);
+            let result = backend::vtracer_backend::vectorize_with_vtracer(&image, cfg);
             tracing::info!("VTracer engine completed in {:?}", t0.elapsed());
             result
         }
         Engine::Hybrid => {
             let t0 = crate::par::instant_now();
-            let result = backend::hybrid::vectorize_hybrid_with_progress(image, cfg, state);
+            let result = backend::hybrid::vectorize_hybrid_with_progress(&image, cfg, state);
             tracing::info!("Hybrid engine completed in {:?}", t0.elapsed());
             result
         }
-        Engine::Native => vectorize_native(image, cfg),
+        Engine::Native => vectorize_native(&image, cfg),
     }?;
 
     // Logo mode: apply logo-specific post-processing
@@ -673,7 +805,11 @@ pub fn vectorize_with_progress(
         svg
     };
 
-    Ok(post_process_svg(&svg, config))
+    let mut svg = post_process_svg(&svg, config);
+    if downscaled {
+        svg = rescale_svg_viewbox(&svg, orig_width, orig_height);
+    }
+    Ok(svg)
 }
 
 /// Native vectorization pipeline.
